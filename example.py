@@ -1,6 +1,21 @@
-AWG = FPGA_AWG()    # server is now listening
 
-wf_config = {freq: 10, amp: 11, mode:"arb", env_name...}    # don't include time
+
+###### server side code #########################
+AWG = FPGA_AWG()    # server is now listening   #
+AWG.run_server()                                #
+#################################################
+
+
+
+
+###### client side code #########################
+#                                               #
+#                                               #
+#################################################
+from FPGA_AWG_client import *
+
+# create json file for wf and envelope
+wf_config = {freq: 10, amp: 11, mode:"arb"}    # don't include time
 idata = [...]
 qdata = [...]
 
@@ -15,14 +30,23 @@ ch2: [...]
 # just add gauss envelope to X_gauss
 
 
+client = FPGA_AWG_client()
+client.connect(host="192.168.0.234", port=8080)
+# if there are two files on the disk with different file name but the same name, then the old file should be overwritten 
+# the easiest way to do it is just have a dict that points the name to the file name 
+# to repoint, it needs to delete the old file, and upload the new file, then point the name to the file name of the new file
+client.upload_waveform_cfg("X_pulse.json", name="X")
+client.upload_waveform_cfg("Y_pulse.json", name="Y")
+client.upload_waveform_cfg("-Y_pulse.json", name="-Y")
+client.upload_waveform_cfg("-X_pulse.json", name="-X")
 
-AWG.upload_waveform_config(wf_config, name=X)
-AWG.upload_envelope_data(idata, qdata, name)
-AWG.upload_program_config(prog_cfg, name)
-print(AWG.get_waveform_lst)
-... 
-AWG.set_trigger_mode("external")
-AWG.start_program(prog_name)    # run the current program, AWG switches to firing mode
-AWG.stop_program()    # stops whichever program is running, goes back to listening mode
+# same logic applies here
+client.upload_program("XY8.json", name="XY8")
+client.upload_envelope_data(idata="X_i_envelope.json", qdata="X_q_envelope.json", iname="X_i_envelope", qname="X_q_envelope")
+
+client.set_trigger_mode(trig_mode="external")
+
+client.start_program("XY8")
+
 
 

@@ -7,6 +7,5 @@
     "phrst": 0,
     "stdysel": null,
     "outsel": null,
-    "length": 10000,
-    "waveform": "gauss"
+    "length": 10000
 }

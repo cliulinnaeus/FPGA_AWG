@@ -2,7 +2,7 @@ from qick import *
 from AWGProgram import *
 from server import *
 import os
-
+import json
 
 class FPGA_AWG(Server):
     
@@ -19,16 +19,16 @@ class FPGA_AWG(Server):
         # file_path is the directory that saves all waveform, program, and envelope files
         super().__init__()
 
-        # stores the name of the files
-        self.waveform_lst = []     # list of registered waveforms
-        self.envelope_lst = []     # list of idata and qdata  
-        self.program_lst = []      # the program to be ran
-        
-        # Initialize dictionaries to hold the file contents
-        # TODO: do I need to compile the file content here?
-        self.waveform_lst = self.load_files_to_lst(self.waveform_dir_path)
-        self.envelope_lst = self.load_files_to_lst(self.envelope_dir_path)
-        self.program_lst = self.load_files_to_lst(self.program_dir_path)
+   
+        # key: name; value: path to .json
+        self.waveform_lst = {}     # list of registered waveforms
+        self.envelope_lst = {}     # list of idata and qdata  
+        self.program_lst = {}      # the program to be ran
+
+        # register all .json files currently on disk into the above dicts
+        self.waveform_lst = self._load_files_to_dict(self.waveform_dir_path)
+        self.envelope_lst = self._load_files_to_dict(self.envelope_dir_path)
+        self.program_lst = self._load_files_to_dict(self.program_dir_path)
 
 
         # start self.server on listening mode
@@ -38,56 +38,45 @@ class FPGA_AWG(Server):
         # load the programming logic onto FPGA
         self.soc = QickSoc()
         self.soccfg = self.soc
-        self.awg_prog = None
+        self.awg_prog = None         # AWGProgram to be created during compilation
 
 
         # start the server for listening, state will be set to listening
         # TODO: combine everything into start server, the server should set up when 
         # instantiated, then when calling start_server() then it should be ready to listen to 
         # connections and process commands 
-        self.start_server()                # bind to port 
-        self.set_to_listening_state()      # configure to wait for connection and command 
-        self.run()                         # start the server infinitely looping for connection
+        self.run_server()                # start the server and let it listen for client connections
                 
 
-    def load_files_to_lst(self, directory_path, type_of_file):
+    def _load_files_to_dict(self, directory_path):
         """
         Helper function to load json files from a directory into a dictionary.
-        need to read the name first
-        then just save the name to the respective dict, (DOES THIS MAKE ANY SENSE????)
-
-
+        Ensures that two json files with the same "name" subfield will be overwritten in the dict.
+        Returns a dict containing all json files stored in current directory_path
         """
-        #### TODO: modify this so that it reads json into lists/dict 
         file_dict = {}
         if os.path.exists(directory_path):
             for filename in os.listdir(directory_path):
-                file_path = os.path.join(directory_path, filename)
-                if os.path.isfile(file_path):
-                    if type_of_file == "waveform":
-                        file_dict[filename] = self.parse_waveform(filename)
-                    elif type_of_file == "envelope":
-                        file_dict[filename] = self.parse_envelope(filename)
-                    elif type_of_file == "program":
-                        file_dict[filename] = self.parse_program(filename)
+                if filename.endswith('.json'):  # Check if the file is a .json file
+                    file_path = os.path.join(directory_path, filename).replace('\\', '/')  # Ensure the path uses forward slashes
+                    if os.path.isfile(file_path):
+                        name = self._read_file_name(file_path)
+                        file_dict[name] = file_path
         return file_dict
 
 
+    def _read_file_name(self, file_path):
+        """
+        Helper function to read "name" field in the json file FILE_PATH
+        """
+        with open(file_path, 'rb') as file:
+            data = json.load(file)
+            name = data["name"]
+        return name
 
-    """
-    Parser functions to convert txt files to configuration dictionaries (for waveform and program)
-    """
-    def parse_waveform(self, filename):
-        pass
 
-    def parse_envelope(self, filename):
-        pass
 
-    def parse_program(self, filename):
-        pass
-
-    
-    def run(self):
+    def run_server(self):
         """
         run indefinitely
         listens to client commands and executes them 
@@ -138,9 +127,15 @@ class FPGA_AWG(Server):
            
         """
 
+        # bind server to server port    
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.bind((Server.host, Server.port))
+        self.server_socket.listen()
+        self.is_running = True
+        print(f"Server listening on port {Server.port}...")
+
         # infinite loop to wait for connection 
         while True:
-
             try:
                 conn, addr = self.server_socket.accept()
                 print(f"Connected by {addr}")
@@ -218,10 +213,11 @@ class FPGA_AWG(Server):
     
     def upload_waveform_cfg(self, conn):
         if self.state != "listening":
-            print(f"FPGA server not listening: current state is {self.state}.")
+            print(f"Can't receive file: current AWG state is {self.state}.")
             return 
         
         name = self.receive_string(conn)
+        # if name here and the name in json have discrepancy, what should I do?
         self.receive_file(conn, FPGA_AWG.waveform_dir_path)            # save the config file to disk
 
         # TODO: read the file and save it to waveform dict
@@ -231,7 +227,7 @@ class FPGA_AWG(Server):
     
     def upload_envelope_data(self, conn):
         if self.state != "listening":
-            print(f"FPGA server not listening: current state is {self.state}.")
+            print(f"Can't receive file: current AWG state is {self.state}.")
             return 
         i_name = self.receive_string(conn)
         self.receive_file(conn, FPGA_AWG.envelope_dir_path)
@@ -246,7 +242,7 @@ class FPGA_AWG(Server):
     # upload the program config 
     def upload_program(self, conn):
         if self.state != "listening":
-            print(f"FPGA server not listening: current state is {self.state}.")
+            print(f"Can't receive file: current AWG state is {self.state}.")
             return
         
         name = self.receive_string(conn)
@@ -258,17 +254,17 @@ class FPGA_AWG(Server):
 
     def delete_waveform_config(self, conn):
         if self.state != "listening":
-            print(f"FPGA server not listening: current state is {self.state}.")
+            print(f"Can't receive file: current AWG state is {self.state}.")
             return
 
         name = self.receive_string(conn)
         if name not in self.waveform_lst:
             print(f"Not found in waveform list: {name}")
         else:
-            self.waveform_lst.pop(name)
             try:
-                path = FPGA_AWG.waveform_dir_path + name
+                path = os.path.join(FPGA_AWG.waveform_dir_path, self.waveform_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
+                self.waveform_lst.pop(name)
             except Exception as e:
                 print(f"Error: {e}")
                 
@@ -276,42 +272,42 @@ class FPGA_AWG(Server):
     
     def delete_envelope_data(self, conn):
         if self.state != "listening":
-            print(f"FPGA server not listening: current state is {self.state}.")
+            print(f"Can't delete file: current AWG state is {self.state}.")
             return 
         
         name = self.receive_string(conn)
         if name not in self.envelope_lst:
             print(f"Not found in envelope list: {name}")
         else:
-            self.envelope_lst.pop(name)
             try:
-                path = FPGA_AWG.envelope_dir_path +  name
+                path = os.path.join(FPGA_AWG.envelope_dir_path, self.envelope_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
+                self.envelope_lst.pop(name)
             except Exception as e:
                 print(f"Error: {e}")
-
 
     
     def delete_program(self, conn):
         if self.state != "listening":
-            print(f"FPGA server not listening: current state is {self.state}.")
+            print(f"Can't delete file: current AWG state is {self.state}.")
             return
         
         name = self.receive_string(conn)
         if name not in self.program_lst:
             print(f"Not found in program list: {name}")
         else:
-            self.program_lst.pop(name)
             try:
-                path = FPGA_AWG.program_dir_path + name
+                path = os.path.join(FPGA_AWG.program_dir_path, self.program_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
+                self.program_lst.pop(name)
             except Exception as e:
                 print(f"Error: {e}")
 
     
+    
     def set_trigger_mode(self, conn):
         if self.state != "listening":
-            print(f"FPGA server not listening: current state is {self.state}.")               
+            print(f"Can't set trigger: current AWG state is {self.state}.")
             return
         
         trig_mode = self.receive_string(conn)
@@ -358,10 +354,19 @@ class FPGA_AWG(Server):
         prog_name = self.receive_string(conn)
         # TODO: correctly configure all pulse, compile program, and run
 
+        # find the file with prog_name, read json
+        # for program_structure, for each appeared pulse name, search pulse_cfg and generate code to set registers
+        # link each pulse to it's respective waveform envelope
+        # for program_structure, generate the asm code for the program structure of each channel 
 
-        self.set_to_firing_state()
-        # TODO: compile program here to asm
-        
+        self.awg_prog = AWGProgram(self.soccfg, self.soc)
+
+        # TODO: write AWGProgram.compile_awg_program(prog_name)
+        self.awg_prog.compile_awg_program(prog_name)     # save as an AWGProgram object
+        self.awg_prog.config_all(self.soc)               # soc loads all parameters into registers and waveform data into PL memory
+        self.soc.start_src(self.trig_mode)               # reset the trigger mode
+
+        self.set_state("firing")                         # to indicate that the server will no longer listen to uploads or deletion        
 
         self.soc.start_tproc()                           # starts the tproc to run AWGProgram. Pulse will fire when trigger comes in "external" mode
                                                          # or will fire immediately in "internal" mode

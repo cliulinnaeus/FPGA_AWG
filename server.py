@@ -11,15 +11,6 @@ class Server():
         self.is_running = False  
     
     
-    def start_server(self):
-        """
-        Start the server and wait for connection
-        """
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.listen()
-        self.is_running = True
-        print(f"Server listening on port {Server.port}...")
-
 
     def shutdown_server(self):
         if self.server_socket:
@@ -29,11 +20,15 @@ class Server():
 
 
     # To be overwritten by a child class
-    def run(self):
-        if not self.server_socket:
-            raise Exception("Server has not been started!")
-        
-        return
+    def run_server(self):
+        """
+        Start the server and wait for connection
+        """
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.bind((Server.host, Server.port))
+        self.server_socket.listen()
+        self.is_running = True
+        print(f"Server listening on port {Server.port}...")
         
     
     def receive_int(self, conn):

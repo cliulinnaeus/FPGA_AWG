@@ -1,7 +1,5 @@
 from client import *
 
-
-
 # a python based client 
 class FPGA_AWG_client(Client):
 
@@ -48,6 +46,10 @@ class FPGA_AWG_client(Client):
 
     def check_state(self):
         self.send_string("CHECK_STATE")
+
+    def set_trigger_mode(self, trig_mode):
+        self.send_string("SET_TRIGGER_MODE")
+        self.send_string(trig_mode)
         
         
 

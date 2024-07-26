@@ -6,26 +6,28 @@ class Client():
 
     buffer_size = 4096
     
-    def __init__(self, host, port):
-        self.host = host        # 192.168.0.234 by default
-        self.port = port        # 8080 by default
+    def __init__(self):
+        self.host = None        # 192.168.0.234 by default
+        self.port = None        # 8080 by default
 
     
     # To be deleted
-    def connect_and_send_file(self, file_to_send):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-                client_socket.connect((self.host, self.port))
-                print(f"Connected to server {self.host} on port {self.port}")
-                self.send_file(file_to_send, client_socket) 
-        except Exception as e:
-            print(f"Error connecting to server: {e}")
+    # def connect_and_send_file(self, file_to_send):
+    #     try:
+    #         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+    #             client_socket.connect((self.host, self.port))
+    #             print(f"Connected to server {self.host} on port {self.port}")
+    #             self.send_file(file_to_send, client_socket) 
+    #     except Exception as e:
+    #         print(f"Error connecting to server: {e}")
     
-    def connect(self):
+    def connect(self, host, port):
         try:
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.client_socket.connect((self.host, self.port))
-            print(f"Connected to server {self.host} on port {self.port}")
+            self.client_socket.connect((host, port))
+            self.host = host
+            self.port = port
+            print(f"Connected to server {host} on port {port}")
         except Exception as e:
             print(f"Error connecting to server: {e}") 
     
