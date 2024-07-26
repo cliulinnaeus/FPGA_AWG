@@ -64,6 +64,9 @@ class Server():
         
     
     def receive_file(self, conn, dir_path):
+        """
+        returns filename received
+        """
         try:
             file_size = self.receive_int(conn)
             filename_size = self.receive_int(conn)
@@ -73,12 +76,13 @@ class Server():
             if not filename:
                 print("Filename not received.")
                 return
+            
+            filename = os.path.basename(filename)        # converts abs path to just the file name. e.g. "dir/file.json" to "file.json"
+            
             # Ensure the directory path ends with a separator
-            if not dir_path.endswith(os.path.sep):
-                dir_path += os.path.sep
-
+            dir_path = os.path.join(dir_path, filename).replace('\\', '/')
             # 'wb' mode ensures that an existing file will be overwritten by the newly sent file
-            with open(dir_path + filename, 'wb') as file:
+            with open(dir_path, 'wb') as file:
                 while True:
                     if remaining_size > Server.buffer_size:
                         data = conn.recv(Server.buffer_size)
@@ -92,6 +96,7 @@ class Server():
                         break
                     file.write(data)
             conn.sendall("File received successfully.".encode())
+            return filename
         except Exception as e:
             print(f"Error receiving file: {e}")
             conn.sendall("Failed to receive file.".encode()) 

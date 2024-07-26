@@ -211,6 +211,11 @@ class FPGA_AWG(Server):
         self.state = state
     
     
+    def _check_matching_names(self, name, file_path):
+        name_read = self._read_file_name(file_path)
+        return name == name_read
+
+
     def upload_waveform_cfg(self, conn):
         if self.state != "listening":
             print(f"Can't receive file: current AWG state is {self.state}.")
@@ -218,25 +223,42 @@ class FPGA_AWG(Server):
         
         name = self.receive_string(conn)
         # if name here and the name in json have discrepancy, what should I do?
-        self.receive_file(conn, FPGA_AWG.waveform_dir_path)            # save the config file to disk
 
-        # TODO: read the file and save it to waveform dict
-        self.waveform_lst[name] = self.parse_waveform(name)    # parser  converts waveform file into wf_cfg
-
+        # check if the given name and the name written in json are matched, if not, delete the written file and return
+        filename = self.receive_file(conn, FPGA_AWG.waveform_dir_path)            # save the config file to disk; filename does not contain abs path
+        file_path = os.path.join(FPGA_AWG.waveform_dir_path, filename).replace('\\', '/')
+        if not self._check_matching_names(filename, file_path):
+            print("Error: name in .json and the given name must match!")
+            os.remove(file_path)
+            return                   
+        self.waveform_lst[name] = file_path
 
     
+
     def upload_envelope_data(self, conn):
         if self.state != "listening":
             print(f"Can't receive file: current AWG state is {self.state}.")
             return 
+        # TODO: need to handle the None case, i.e. i data or q data is None
+
         i_name = self.receive_string(conn)
-        self.receive_file(conn, FPGA_AWG.envelope_dir_path)
+        i_filename = self.receive_file(conn, FPGA_AWG.envelope_dir_path)
+        i_file_path = os.path.join(FPGA_AWG.envelope_dir_path, i_filename).replace('\\', '/')
+        if not self._check_matching_names(i_filename, i_name):
+            print("Error: name in .json and the given name must match!")
+            os.remove(i_file_path)
+            return 
+
         q_name = self.receive_string(conn)
-        self.receive_file(conn, FPGA_AWG.envelope_dir_path)
+        q_filename = self.receive_file(conn, FPGA_AWG.envelope_dir_path)
+        q_file_path = os.path.join(FPGA_AWG.envelope_dir_path, q_filename).replace('\\', '/')
+        if not self._check_matching_names(q_filename, q_name):
+            print("Error: name in .json and the given name must match!")
+            os.remove(q_file_path)
+            return
 
-        self.envelope_lst[i_name] = self.parse_envelope(i_name)
-        self.envelope_lst[q_name] = self.parse_envelope(q_name)
-
+        self.envelope_lst[i_name] = i_file_path
+        self.envelope_lst[q_name] = q_file_path
 
 
     # upload the program config 
@@ -246,10 +268,13 @@ class FPGA_AWG(Server):
             return
         
         name = self.receive_string(conn)
-        self.receive_file(conn, FPGA_AWG.program_dir_path)
-
-        self.program_lst[name] = self.parse_program(name)
-
+        filename = self.receive_file(conn, FPGA_AWG.program_dir_path)
+        file_path = os.path.join(FPGA_AWG.program_dir_path, filename).replace('\\', '/')
+        if not self._check_matching_names(filename, file_path):
+            print("Error: name in .json and the given name must match!")
+            os.remove(file_path)
+            return                   
+        self.program_lst[name] = file_path
 
 
     def delete_waveform_config(self, conn):
@@ -304,7 +329,7 @@ class FPGA_AWG(Server):
                 print(f"Error: {e}")
 
     
-    
+
     def set_trigger_mode(self, conn):
         if self.state != "listening":
             print(f"Can't set trigger: current AWG state is {self.state}.")
