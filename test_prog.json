@@ -1,0 +1,17 @@
+{
+    "name": "test_prog_name",
+
+    "prog_structure": [
+        
+        {"ch1": "[X, Y, I, rep(10, [X, Y, I, Z])]"},
+        {"ch2": "[X, Y, Z, ...]"}
+    ],
+
+    "env_to_wf_table": [
+        {
+            "X": ["i_data", "q_data"], 
+            "Y": null
+        }
+    ]
+}
+
