@@ -1,5 +1,5 @@
-from qick import *
-from AWGProgram import *
+# from qick import *
+# from AWGProgram import *
 from server import *
 import os
 import json
@@ -36,8 +36,8 @@ class FPGA_AWG(Server):
                                       # or firing status
         
         # load the programming logic onto FPGA
-        self.soc = QickSoc()
-        self.soccfg = self.soc
+        # self.soc = QickSoc()
+        # self.soccfg = self.soc
         self.awg_prog = None         # AWGProgram to be created during compilation
 
 
@@ -203,7 +203,6 @@ class FPGA_AWG(Server):
     def get_state(self):
         return self.state
     
-    @status.setter
     def set_state(self, state):
         """
         set the AWG into server listening mode or firing mode 
