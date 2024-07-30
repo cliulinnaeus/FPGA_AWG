@@ -107,21 +107,38 @@ class Server():
     def _utf8len(self, s):
         return len(s.encode('utf-8'))
 
-    def _send_int(self, n):
-        val = str(n) + '\n'
-        self.client_socket.sendall(val.encode())
+
+
+    def _send_int(self, conn, n):
+        """
+        Function for sending server acknowledgement to client
+        """
+        # Pack the integer as a 4-byte big-endian format
+        val = struct.pack('!I', n)
+        conn.sendall(val)
 
 
     # send a single string s to server 
-    def _send_string(self, s):
+    def _send_string(self, conn, s):
+        """
+        Function for sending server acknowledgement to client
+        """
         if not self.client_socket:
-            raise Exception("Client not connected.")
+            print("Client not connected.")
         
         try:
-            self._send_int(self._utf8len(s), s)        # send the length of words in bytes
-            self.client_socket.sendall(s.encode())
+            self.send_int(conn, self._utf8len(s))        # send the length of s in bytes
+            conn.sendall(s.encode())
         except Exception as e:
-            print(f"Error sending string: {e}")   
+            print(f"Error sending server acknolwedgement: {e}")   
     
-    
+
+    def _send_server_ack(self, conn, msg):
+        try:
+            s = f"Server acknowledgement: {msg}"
+            print(s)
+            self._send_string(conn, s)
+        except Exception as e:
+            print(f"Error sending server acknolwedgement: {e}")
+
 
