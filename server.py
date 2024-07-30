@@ -1,6 +1,6 @@
 import socket
 import os 
-
+import struct
 
 class Server():
     host = '0.0.0.0'
@@ -9,7 +9,6 @@ class Server():
     
     def __init__(self, ):
         self.is_running = False  
-    
     
 
     def shutdown_server(self):
@@ -32,74 +31,97 @@ class Server():
         
     
     def receive_int(self, conn):
-        buf = ''
-        sep = '\n'
-        while sep not in buf:
-            buf += conn.recv(1).decode()
-        num = int(buf)
-        return num
+        try:
+            buf = b''
+            while len(buf) < 4:  # Assuming the integer is 4 bytes long
+                data = conn.recv(4 - len(buf))
+                if not data:
+                    return None
+                buf += data
+            num = struct.unpack('!I', buf)[0]  # Network byte order (big-endian)
+            return num
+        except Exception as e:
+            print(f"Error receiving int: {e}")
+            return None
 
-    
+
     def receive_string(self, conn):
         try:
             string_size = self.receive_int(conn)
-            remaining_size = string_size
-            buf = ''
-            while True:
-                if remaining_size > Server.buffer_size:
-                    data = conn.recv(Server.buffer_size)
-                    if not data:
-                        break
-                    data_size = len(data)
-                    remaining_size = remaining_size - data_size
-                else:
-                    data = conn.recv(remaining_size)
-                    buf += data.decode()
-                    break
-                buf += data.decode()
-            return buf        
+            if string_size is None:
+                return None
+
+            buf = b''
+            while len(buf) < string_size:
+                data = conn.recv(min(Server.buffer_size, string_size - len(buf)))
+                if not data:
+                    return None
+                buf += data
+
+            return buf.decode()
         except Exception as e:
             print(f"Error receiving string: {e}")
-            conn.sendall("Failed to receive string.".encode()) 
-        
-    
+            return None
+      
+      
     def receive_file(self, conn, dir_path):
         """
-        returns filename received
+        Returns filename received
         """
         try:
             file_size = self.receive_int(conn)
+            if file_size is None:
+                return None
             filename_size = self.receive_int(conn)
+            if filename_size is None:
+                return None
             filename = conn.recv(filename_size).decode()
-            remaining_size = file_size
-
             if not filename:
                 print("Filename not received.")
-                return
-            
-            filename = os.path.basename(filename)        # converts abs path to just the file name. e.g. "dir/file.json" to "file.json"
-            
+                return None
+
+            filename = os.path.basename(filename)  # Convert abs path to just the file name
+
             # Ensure the directory path ends with a separator
             dir_path = os.path.join(dir_path, filename).replace('\\', '/')
             # 'wb' mode ensures that an existing file will be overwritten by the newly sent file
             with open(dir_path, 'wb') as file:
-                while True:
-                    if remaining_size > Server.buffer_size:
-                        data = conn.recv(Server.buffer_size)
-                        if not data:
-                            break
-                        data_size = len(data)
-                        remaining_size = remaining_size - data_size
-                    else:
-                        data = conn.recv(remaining_size)
-                        file.write(data)
-                        break
+                remaining_size = file_size
+                while remaining_size > 0:
+                    data = conn.recv(min(Server.buffer_size, remaining_size))
+                    if not data:
+                        print("Client disconnected during file transfer.")
+                        return None
                     file.write(data)
-            conn.sendall("File received successfully.".encode())
+                    remaining_size -= len(data)
             return filename
         except Exception as e:
             print(f"Error receiving file: {e}")
-            conn.sendall("Failed to receive file.".encode()) 
+            try:
+                conn.sendall("Failed to receive file.".encode())
+            except:
+                pass
+            return None  
 
 
+    def _utf8len(self, s):
+        return len(s.encode('utf-8'))
+
+    def _send_int(self, n):
+        val = str(n) + '\n'
+        self.client_socket.sendall(val.encode())
+
+
+    # send a single string s to server 
+    def _send_string(self, s):
+        if not self.client_socket:
+            raise Exception("Client not connected.")
+        
+        try:
+            self._send_int(self._utf8len(s), s)        # send the length of words in bytes
+            self.client_socket.sendall(s.encode())
+        except Exception as e:
+            print(f"Error sending string: {e}")   
+    
+    
 

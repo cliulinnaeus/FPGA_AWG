@@ -1,14 +1,17 @@
-# from qick import *
-# from AWGProgram import *
+from qick import *
+from AWGProgram import *
 from server import *
 import os
 import json
 
 class FPGA_AWG(Server):
     
-    waveform_dir_path = ""    # TODO: put in abs path for saving the program data; 
-    envelope_dir_path = "" 
-    program_dir_path = ""
+    host = '0.0.0.0'
+    port = 8080
+    
+    waveform_dir_path = "/home/xilinx/FPGA_AWG/waveform_cfg"
+    envelope_dir_path = "/home/xilinx/FPGA_AWG/envelope_data" 
+    program_dir_path = "/home/xilinx/FPGA_AWG/program_cfg"
 
 
 
@@ -16,9 +19,15 @@ class FPGA_AWG(Server):
         """
         set up the communication and have an server actively listening 
         """
-        # file_path is the directory that saves all waveform, program, and envelope files
         super().__init__()
 
+
+        # List of directory paths
+        dir_paths = [FPGA_AWG.waveform_dir_path, FPGA_AWG.envelope_dir_path, FPGA_AWG.program_dir_path]
+        # Create directories if they don't exist
+        for path in dir_paths:
+            if not os.path.exists(path):
+                os.makedirs(path)
    
         # key: name; value: path to .json
         self.waveform_lst = {}     # list of registered waveforms
@@ -32,12 +41,12 @@ class FPGA_AWG(Server):
 
 
         # start self.server on listening mode
-        self.set_state("starting")   # does nothing other than indicating the status. SET_TO_LISTENING_STATUS() only from "starting"
+        self.set_state("listening")   # does nothing other than indicating the status. SET_TO_LISTENING_STATUS() only from "starting"
                                       # or firing status
         
         # load the programming logic onto FPGA
-        # self.soc = QickSoc()
-        # self.soccfg = self.soc
+        self.soc = QickSoc()
+        self.soccfg = self.soc
         self.awg_prog = None         # AWGProgram to be created during compilation
 
 
@@ -45,7 +54,7 @@ class FPGA_AWG(Server):
         # TODO: combine everything into start server, the server should set up when 
         # instantiated, then when calling start_server() then it should be ready to listen to 
         # connections and process commands 
-        self.run_server()                # start the server and let it listen for client connections
+        # self.run_server()                # start the server and let it listen for client connections
                 
 
     def _load_files_to_dict(self, directory_path):
@@ -73,6 +82,15 @@ class FPGA_AWG(Server):
             data = json.load(file)
             name = data["name"]
         return name
+
+
+    def _print_and_sendall(self, conn, msg):
+        try:
+            print(msg)
+            self._send_string()
+            conn.sendall(msg.encode())
+        except Exception as e:
+            print(f"Error sending server acknolwedgement: {e}")
 
 
 
@@ -129,10 +147,10 @@ class FPGA_AWG(Server):
 
         # bind server to server port    
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind((Server.host, Server.port))
+        self.server_socket.bind((FPGA_AWG.host, FPGA_AWG.port))
         self.server_socket.listen()
         self.is_running = True
-        print(f"Server listening on port {Server.port}...")
+        print(f"Server listening on port {FPGA_AWG.port}...")
 
         # infinite loop to wait for connection 
         while True:
@@ -140,10 +158,16 @@ class FPGA_AWG(Server):
                 conn, addr = self.server_socket.accept()
                 print(f"Connected by {addr}")
 
+
                 # loop to process commands 
                 while True:
                     try: 
                         command = self.receive_string(conn)
+                        # handle the case where client is disconnected
+                        if command is None:
+                            break                        
+                        
+                        # process commands
                         if command == "UPLOAD_WAVEFORM_CFG":
                             self.upload_waveform_cfg(conn)
 
@@ -172,19 +196,21 @@ class FPGA_AWG(Server):
                             self.stop_program()
 
                         else: 
-                            print(f"Unknown command: {command}")
+                            msg = f"Unknown command: {command}"
+                            self._print_and_sendall(conn, msg)
 
                     except Exception as e:
                         print(f"Error: {e}")
-                        break
-
+                        break                    
+                
+                
             except Exception as e:
-                self.conn.close()
+                conn.close()
                 print(f"Error: {e}")
             finally:
-                self.conn.close()
+                conn.close()
                 print(f"Connection to {addr} has been closed.")
-                print(f"Server listening on port {Server.port}...")
+                print(f"Server listening on port {FPGA_AWG.port}...")
         
         
     @property
@@ -209,136 +235,152 @@ class FPGA_AWG(Server):
         """        
         self.state = state
     
-    
-    def _check_matching_names(self, name, file_path):
-        name_read = self._read_file_name(file_path)
-        return name == name_read
+
+
+    def _update_json_file(self, file_path, new_name):
+        try:
+            if os.path.exists(file_path):
+                with open(file_path, 'r+') as json_file:
+                    data = json.load(json_file)
+                    if data.get("name") != new_name:
+                        data["name"] = new_name
+                        json_file.seek(0)
+                        json.dump(data, json_file, indent=4)
+                        json_file.truncate()
+        except Exception as e:
+            print(f"Error updating JSON file: {e}")
 
 
     def upload_waveform_cfg(self, conn):
         if self.state != "listening":
-            print(f"Can't receive file: current AWG state is {self.state}.")
+            msg = f"Can't receive file: current AWG state is {self.state}."
+            self._print_and_sendall(conn, msg)
             return 
-        
         name = self.receive_string(conn)
-        # if name here and the name in json have discrepancy, what should I do?
+        # if the name here and the name in json are different, replace the name in json by the name given
 
-        # check if the given name and the name written in json are matched, if not, delete the written file and return
         filename = self.receive_file(conn, FPGA_AWG.waveform_dir_path)            # save the config file to disk; filename does not contain abs path
         file_path = os.path.join(FPGA_AWG.waveform_dir_path, filename).replace('\\', '/')
-        if not self._check_matching_names(filename, file_path):
-            print("Error: name in .json and the given name must match!")
-            os.remove(file_path)
-            return                   
+        # if name is not equal to json file's name field, update the json name 
+        self._update_json_file(file_path, name)                 
         self.waveform_lst[name] = file_path
-
+        msg = "File received successfully."
+        self._print_and_sendall(conn, msg)
     
 
     def upload_envelope_data(self, conn):
         if self.state != "listening":
-            print(f"Can't receive file: current AWG state is {self.state}.")
-            return 
-        # TODO: need to handle the None case, i.e. i data or q data is None
-
-        i_name = self.receive_string(conn)
-        i_filename = self.receive_file(conn, FPGA_AWG.envelope_dir_path)
-        i_file_path = os.path.join(FPGA_AWG.envelope_dir_path, i_filename).replace('\\', '/')
-        if not self._check_matching_names(i_filename, i_name):
-            print("Error: name in .json and the given name must match!")
-            os.remove(i_file_path)
+            msg = f"Can't receive file: current AWG state is {self.state}."
+            self._print_and_sendall(conn, msg)
             return 
 
-        q_name = self.receive_string(conn)
-        q_filename = self.receive_file(conn, FPGA_AWG.envelope_dir_path)
-        q_file_path = os.path.join(FPGA_AWG.envelope_dir_path, q_filename).replace('\\', '/')
-        if not self._check_matching_names(q_filename, q_name):
-            print("Error: name in .json and the given name must match!")
-            os.remove(q_file_path)
-            return
-
-        self.envelope_lst[i_name] = i_file_path
-        self.envelope_lst[q_name] = q_file_path
+        name = self.receive_string(conn)
+        filename = self.receive_file(conn, FPGA_AWG.envelope_dir_path)
+        file_path = os.path.join(FPGA_AWG.envelope_dir_path, filename).replace('\\', '/')
+        self._update_json_file(file_path, name)    
+        self.envelope_lst[name] = file_path
+        msg = "Files received successfully."
+        self._print_and_sendall(conn, msg)
 
 
     # upload the program config 
     def upload_program(self, conn):
         if self.state != "listening":
-            print(f"Can't receive file: current AWG state is {self.state}.")
+            msg = f"Can't receive file: current AWG state is {self.state}."
+            self._print_and_sendall(conn, msg)
             return
         
         name = self.receive_string(conn)
         filename = self.receive_file(conn, FPGA_AWG.program_dir_path)
         file_path = os.path.join(FPGA_AWG.program_dir_path, filename).replace('\\', '/')
-        if not self._check_matching_names(filename, file_path):
-            print("Error: name in .json and the given name must match!")
-            os.remove(file_path)
-            return                   
+        self._update_json_file(file_path, name)                 
+                 
         self.program_lst[name] = file_path
+        msg = "File received successfully."
+        self._print_and_sendall(conn, msg)
 
 
     def delete_waveform_config(self, conn):
         if self.state != "listening":
-            print(f"Can't receive file: current AWG state is {self.state}.")
+            msg = f"Can't receive file: current AWG state is {self.state}."
+            self._print_and_sendall(conn, msg)
             return
 
         name = self.receive_string(conn)
         if name not in self.waveform_lst:
-            print(f"Not found in waveform list: {name}")
+            msg = f"{name} is not found in waveform list."
+            self._print_and_sendall(conn, msg)
         else:
             try:
                 path = os.path.join(FPGA_AWG.waveform_dir_path, self.waveform_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
                 self.waveform_lst.pop(name)
+                msg = f"{name} is deleted successfully."
+                self._print_and_sendall(conn, msg)
             except Exception as e:
-                print(f"Error: {e}")
+                msg = f"Error: {e}"
+                self._print_and_sendall(conn, msg)
                 
 
     
     def delete_envelope_data(self, conn):
         if self.state != "listening":
-            print(f"Can't delete file: current AWG state is {self.state}.")
+            msg = f"Can't delete file: current AWG state is {self.state}."
+            self._print_and_sendall(conn, msg)
             return 
         
         name = self.receive_string(conn)
         if name not in self.envelope_lst:
-            print(f"Not found in envelope list: {name}")
+            msg = f"{name} is not found in envelope list."
+            self._print_and_sendall(conn, msg)
         else:
             try:
                 path = os.path.join(FPGA_AWG.envelope_dir_path, self.envelope_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
                 self.envelope_lst.pop(name)
+                msg = f"{name} is deleted successfully."
+                self._print_and_sendall(conn, msg)
             except Exception as e:
-                print(f"Error: {e}")
-
+                msg = f"Error: {e}"
+                self._print_and_sendall(conn, msg)
     
     def delete_program(self, conn):
         if self.state != "listening":
-            print(f"Can't delete file: current AWG state is {self.state}.")
+            msg = f"Can't delete file: current AWG state is {self.state}."
+            self._print_and_sendall(conn, msg)
             return
         
         name = self.receive_string(conn)
         if name not in self.program_lst:
-            print(f"Not found in program list: {name}")
+            msg = f"{name} is not found in program list."
+            self._print_and_sendall(conn, msg)
         else:
             try:
                 path = os.path.join(FPGA_AWG.program_dir_path, self.program_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
                 self.program_lst.pop(name)
+                msg = f"{name} is deleted successfully."
+                self._print_and_sendall(conn, msg)
             except Exception as e:
-                print(f"Error: {e}")
-
+                msg = f"Error: {e}"
+                self._print_and_sendall(conn, msg)
     
 
     def set_trigger_mode(self, conn):
         if self.state != "listening":
-            print(f"Can't set trigger: current AWG state is {self.state}.")
+            msg = f"Can't set trigger: current AWG state is {self.state}."
+            self._print_and_sendall(conn, msg)
             return
         
         trig_mode = self.receive_string(conn)
         if trig_mode != "internal" and trig_mode != "external":
-            print(f"{trig_mode} is not internal or external.") 
+            msg = f"trig_mode can only be 'internal' or 'external'."
+            self._print_and_sendall(conn, msg)
             return     
         self.trig_mode = trig_mode
+        msg = f"Trigger mode is successfully set to {trig_mode}."
+        self._print_and_sendall(conn, msg)
+        # TODO: set the trigger mode for AWGProgram
 
 
             
