@@ -123,7 +123,7 @@ class Server():
         """
         Function for sending server acknowledgement to client
         """
-        if not self.client_socket:
+        if not conn:
             print("Client not connected.")
         
         try:
