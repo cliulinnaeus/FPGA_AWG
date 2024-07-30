@@ -123,11 +123,11 @@ class Server():
         """
         Function for sending server acknowledgement to client
         """
-        if not self.client_socket:
+        if not conn:
             print("Client not connected.")
         
         try:
-            self.send_int(conn, self._utf8len(s))        # send the length of s in bytes
+            self._send_int(conn, self._utf8len(s))        # send the length of s in bytes
             conn.sendall(s.encode())
         except Exception as e:
             print(f"Error sending server acknowledgement: {e}")   
