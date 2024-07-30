@@ -84,15 +84,6 @@ class FPGA_AWG(Server):
         return name
 
 
-    def _print_and_sendall(self, conn, msg):
-        try:
-            print(msg)
-            self._send_string()
-            conn.sendall(msg.encode())
-        except Exception as e:
-            print(f"Error sending server acknolwedgement: {e}")
-
-
 
     def run_server(self):
         """
@@ -197,7 +188,7 @@ class FPGA_AWG(Server):
 
                         else: 
                             msg = f"Unknown command: {command}"
-                            self._print_and_sendall(conn, msg)
+                            self._send_server_ack(conn, msg)
 
                     except Exception as e:
                         print(f"Error: {e}")
@@ -254,7 +245,7 @@ class FPGA_AWG(Server):
     def upload_waveform_cfg(self, conn):
         if self.state != "listening":
             msg = f"Can't receive file: current AWG state is {self.state}."
-            self._print_and_sendall(conn, msg)
+            self._send_server_ack(conn, msg)
             return 
         name = self.receive_string(conn)
         # if the name here and the name in json are different, replace the name in json by the name given
@@ -265,13 +256,13 @@ class FPGA_AWG(Server):
         self._update_json_file(file_path, name)                 
         self.waveform_lst[name] = file_path
         msg = "File received successfully."
-        self._print_and_sendall(conn, msg)
+        self._send_server_ack(conn, msg)
     
 
     def upload_envelope_data(self, conn):
         if self.state != "listening":
             msg = f"Can't receive file: current AWG state is {self.state}."
-            self._print_and_sendall(conn, msg)
+            self._send_server_ack(conn, msg)
             return 
 
         name = self.receive_string(conn)
@@ -280,14 +271,14 @@ class FPGA_AWG(Server):
         self._update_json_file(file_path, name)    
         self.envelope_lst[name] = file_path
         msg = "Files received successfully."
-        self._print_and_sendall(conn, msg)
+        self._send_server_ack(conn, msg)
 
 
     # upload the program config 
     def upload_program(self, conn):
         if self.state != "listening":
             msg = f"Can't receive file: current AWG state is {self.state}."
-            self._print_and_sendall(conn, msg)
+            self._send_server_ack(conn, msg)
             return
         
         name = self.receive_string(conn)
@@ -297,89 +288,89 @@ class FPGA_AWG(Server):
                  
         self.program_lst[name] = file_path
         msg = "File received successfully."
-        self._print_and_sendall(conn, msg)
+        self._send_server_ack(conn, msg)
 
 
     def delete_waveform_config(self, conn):
         if self.state != "listening":
             msg = f"Can't receive file: current AWG state is {self.state}."
-            self._print_and_sendall(conn, msg)
+            self._send_server_ack(conn, msg)
             return
 
         name = self.receive_string(conn)
         if name not in self.waveform_lst:
             msg = f"{name} is not found in waveform list."
-            self._print_and_sendall(conn, msg)
+            self._send_server_ack(conn, msg)
         else:
             try:
                 path = os.path.join(FPGA_AWG.waveform_dir_path, self.waveform_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
                 self.waveform_lst.pop(name)
                 msg = f"{name} is deleted successfully."
-                self._print_and_sendall(conn, msg)
+                self._send_server_ack(conn, msg)
             except Exception as e:
                 msg = f"Error: {e}"
-                self._print_and_sendall(conn, msg)
+                self._send_server_ack(conn, msg)
                 
 
     
     def delete_envelope_data(self, conn):
         if self.state != "listening":
             msg = f"Can't delete file: current AWG state is {self.state}."
-            self._print_and_sendall(conn, msg)
+            self._send_server_ack(conn, msg)
             return 
         
         name = self.receive_string(conn)
         if name not in self.envelope_lst:
             msg = f"{name} is not found in envelope list."
-            self._print_and_sendall(conn, msg)
+            self._send_server_ack(conn, msg)
         else:
             try:
                 path = os.path.join(FPGA_AWG.envelope_dir_path, self.envelope_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
                 self.envelope_lst.pop(name)
                 msg = f"{name} is deleted successfully."
-                self._print_and_sendall(conn, msg)
+                self._send_server_ack(conn, msg)
             except Exception as e:
                 msg = f"Error: {e}"
-                self._print_and_sendall(conn, msg)
+                self._send_server_ack(conn, msg)
     
     def delete_program(self, conn):
         if self.state != "listening":
             msg = f"Can't delete file: current AWG state is {self.state}."
-            self._print_and_sendall(conn, msg)
+            self._send_server_ack(conn, msg)
             return
         
         name = self.receive_string(conn)
         if name not in self.program_lst:
             msg = f"{name} is not found in program list."
-            self._print_and_sendall(conn, msg)
+            self._send_server_ack(conn, msg)
         else:
             try:
                 path = os.path.join(FPGA_AWG.program_dir_path, self.program_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
                 self.program_lst.pop(name)
                 msg = f"{name} is deleted successfully."
-                self._print_and_sendall(conn, msg)
+                self._send_server_ack(conn, msg)
             except Exception as e:
                 msg = f"Error: {e}"
-                self._print_and_sendall(conn, msg)
+                self._send_server_ack(conn, msg)
     
 
     def set_trigger_mode(self, conn):
         if self.state != "listening":
             msg = f"Can't set trigger: current AWG state is {self.state}."
-            self._print_and_sendall(conn, msg)
+            self._send_server_ack(conn, msg)
             return
         
         trig_mode = self.receive_string(conn)
         if trig_mode != "internal" and trig_mode != "external":
             msg = f"trig_mode can only be 'internal' or 'external'."
-            self._print_and_sendall(conn, msg)
+            self._send_server_ack(conn, msg)
             return     
         self.trig_mode = trig_mode
         msg = f"Trigger mode is successfully set to {trig_mode}."
-        self._print_and_sendall(conn, msg)
+        self._send_server_ack(conn, msg)
         # TODO: set the trigger mode for AWGProgram
 
 
