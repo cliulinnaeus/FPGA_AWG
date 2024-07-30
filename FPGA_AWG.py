@@ -30,59 +30,37 @@ class FPGA_AWG(Server):
                 os.makedirs(path)
    
         # key: name; value: path to .json
-        self.waveform_lst = {}     # list of registered waveforms
-        self.envelope_lst = {}     # list of idata and qdata  
-        self.program_lst = {}      # the program to be ran
+        self.waveform_lst = []     # list of registered waveforms
+        self.envelope_lst = []     # list of idata and qdata  
+        self.program_lst = []      # the program to be ran
 
         # register all .json files currently on disk into the above dicts
-        self.waveform_lst = self._load_files_to_dict(self.waveform_dir_path)
-        self.envelope_lst = self._load_files_to_dict(self.envelope_dir_path)
-        self.program_lst = self._load_files_to_dict(self.program_dir_path)
-
+        self.waveform_lst = self._load_files_to_lst(self.waveform_dir_path)
+        self.envelope_lst = self._load_files_to_lst(self.envelope_dir_path)
+        self.program_lst = self._load_files_to_lst(self.program_dir_path)
 
         # start self.server on listening mode
-        self.set_state("listening")   # does nothing other than indicating the status. SET_TO_LISTENING_STATUS() only from "starting"
-                                      # or firing status
-        
-        # load the programming logic onto FPGA
+        self.set_state("listening")   # does nothing other than indicating what AWG is doing
+
+        # initialize FPGA: load the tproc onto FPGA
         self.soc = QickSoc()
         self.soccfg = self.soc
         self.awg_prog = None         # AWGProgram to be created during compilation
 
-
-        # start the server for listening, state will be set to listening
-        # TODO: combine everything into start server, the server should set up when 
-        # instantiated, then when calling start_server() then it should be ready to listen to 
-        # connections and process commands 
-        # self.run_server()                # start the server and let it listen for client connections
                 
 
-    def _load_files_to_dict(self, directory_path):
+    def _load_files_to_lst(self, dir_path):
         """
-        Helper function to load json files from a directory into a dictionary.
-        Ensures that two json files with the same "name" subfield will be overwritten in the dict.
-        Returns a dict containing all json files stored in current directory_path
+        Helper function to load json files from a directory into a list.
+        Returns a list containing the names of all json files stored in current directory_path
         """
-        file_dict = {}
-        if os.path.exists(directory_path):
-            for filename in os.listdir(directory_path):
+
+        file_lst = []
+        if os.path.exists(dir_path):
+            for filename in os.listdir(dir_path):
                 if filename.endswith('.json'):  # Check if the file is a .json file
-                    file_path = os.path.join(directory_path, filename).replace('\\', '/')  # Ensure the path uses forward slashes
-                    if os.path.isfile(file_path):
-                        name = self._read_file_name(file_path)
-                        file_dict[name] = file_path
-        return file_dict
-
-
-    def _read_file_name(self, file_path):
-        """
-        Helper function to read "name" field in the json file FILE_PATH
-        """
-        with open(file_path, 'rb') as file:
-            data = json.load(file)
-            name = data["name"]
-        return name
-
+                    file_lst.append(os.path.splitext(filename)[0])
+        return file_lst
 
 
     def run_server(self):
@@ -186,6 +164,18 @@ class FPGA_AWG(Server):
                         elif command == "STOP_PROGRAM": 
                             self.stop_program()
 
+                        elif command == "GET_WAVEFORM_LIST":
+                            self.get_waveform_lst(conn)
+
+                        elif command == "GET_ENVELOPE_LIST":
+                            self.get_envelope_lst(conn)
+                        
+                        elif command == "GET_PROGRAM_LIST":
+                            self.get_program_lst(conn)
+
+                        elif command == "GET_STATE":
+                            self.get_state(conn)
+
                         else: 
                             msg = f"Unknown command: {command}"
                             self._send_server_ack(conn, msg)
@@ -204,22 +194,22 @@ class FPGA_AWG(Server):
                 print(f"Server listening on port {FPGA_AWG.port}...")
         
         
-    @property
-    def get_waveform_lst(self):
-        return self.waveform_lst
+    def get_waveform_lst(self, conn):
+        msg = f"Current waveform list: {self.waveform_lst.__repr__()}"
+        self._send_server_ack(conn, msg)
     
-    @property
-    def get_envelope_lst(self):
-        return self.envelope_lst
+    def get_envelope_lst(self, conn):
+        msg = f"Current program list: {self.envelope_lst.__repr__()}"
+        self._send_server_ack(conn, msg)
+
+    def get_program_lst(self, conn):
+        msg = f"Current program list: {self.program_lst.__repr__()}"
+        self._send_server_ack(conn, msg)
        
-    @property
-    def get_program_lst(self):
-        return self.program_lst
-       
-    @property
-    def get_state(self):
-        return self.state
-    
+    def get_state(self, conn):
+        msg = f"Current state is {self.state}..."
+        self._send_server_ack(conn, msg)
+
     def set_state(self, state):
         """
         set the AWG into server listening mode or firing mode 
@@ -227,35 +217,17 @@ class FPGA_AWG(Server):
         self.state = state
     
 
-
-    def _update_json_file(self, file_path, new_name):
-        try:
-            if os.path.exists(file_path):
-                with open(file_path, 'r+') as json_file:
-                    data = json.load(json_file)
-                    if data.get("name") != new_name:
-                        data["name"] = new_name
-                        json_file.seek(0)
-                        json.dump(data, json_file, indent=4)
-                        json_file.truncate()
-        except Exception as e:
-            print(f"Error updating JSON file: {e}")
-
-
     def upload_waveform_cfg(self, conn):
         if self.state != "listening":
             msg = f"Can't receive file: current AWG state is {self.state}."
             self._send_server_ack(conn, msg)
             return 
         name = self.receive_string(conn)
-        # if the name here and the name in json are different, replace the name in json by the name given
-
-        # save file as name.json
+        # filename is not used here 
         filename = self.receive_file(conn, FPGA_AWG.waveform_dir_path, name=name)            # save the config file to disk; filename does not contain abs path
-        file_path = os.path.join(FPGA_AWG.waveform_dir_path, filename).replace('\\', '/')
-        # if name is not equal to json file's name field, update the json name 
-        self._update_json_file(file_path, name)                 
-        self.waveform_lst[name] = file_path
+
+        if name not in self.waveform_lst:
+            self.waveform_lst.append(name)                 
         msg = "File received successfully."
         self._send_server_ack(conn, msg)
     
@@ -267,11 +239,11 @@ class FPGA_AWG(Server):
             return 
 
         name = self.receive_string(conn)
-        filename = self.receive_file(conn, FPGA_AWG.envelope_dir_path)
-        file_path = os.path.join(FPGA_AWG.envelope_dir_path, filename).replace('\\', '/')
-        self._update_json_file(file_path, name)    
-        self.envelope_lst[name] = file_path
-        msg = "Files received successfully."
+        filename = self.receive_file(conn, FPGA_AWG.envelope_dir_path, name=name)
+
+        if name not in self.envelope_lst:
+            self.envelope_lst.append(name) 
+        msg = "File received successfully."
         self._send_server_ack(conn, msg)
 
 
@@ -283,11 +255,10 @@ class FPGA_AWG(Server):
             return
         
         name = self.receive_string(conn)
-        filename = self.receive_file(conn, FPGA_AWG.program_dir_path)
-        file_path = os.path.join(FPGA_AWG.program_dir_path, filename).replace('\\', '/')
-        self._update_json_file(file_path, name)                 
-                 
-        self.program_lst[name] = file_path
+        filename = self.receive_file(conn, FPGA_AWG.program_dir_path, name=name)
+ 
+        if name not in self.program_lst:
+            self.program_lst.append(name)
         msg = "File received successfully."
         self._send_server_ack(conn, msg)
 
@@ -304,9 +275,9 @@ class FPGA_AWG(Server):
             self._send_server_ack(conn, msg)
         else:
             try:
-                path = os.path.join(FPGA_AWG.waveform_dir_path, self.waveform_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
+                path = os.path.join(FPGA_AWG.waveform_dir_path, name + ".json").replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
-                self.waveform_lst.pop(name)
+                self.waveform_lst.remove(name)
                 msg = f"{name} is deleted successfully."
                 self._send_server_ack(conn, msg)
             except Exception as e:
@@ -327,9 +298,9 @@ class FPGA_AWG(Server):
             self._send_server_ack(conn, msg)
         else:
             try:
-                path = os.path.join(FPGA_AWG.envelope_dir_path, self.envelope_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
+                path = os.path.join(FPGA_AWG.envelope_dir_path, name + ".json").replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
-                self.envelope_lst.pop(name)
+                self.envelope_lst.remove(name)
                 msg = f"{name} is deleted successfully."
                 self._send_server_ack(conn, msg)
             except Exception as e:
@@ -348,9 +319,9 @@ class FPGA_AWG(Server):
             self._send_server_ack(conn, msg)
         else:
             try:
-                path = os.path.join(FPGA_AWG.program_dir_path, self.program_lst[name]).replace('\\', '/')  # Ensure the path uses forward slashes
+                path = os.path.join(FPGA_AWG.program_dir_path, name + ".json").replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
-                self.program_lst.pop(name)
+                self.program_lst.remove(name)
                 msg = f"{name} is deleted successfully."
                 self._send_server_ack(conn, msg)
             except Exception as e:
