@@ -70,9 +70,41 @@ class Client():
             print(f"Error sending file: {e}")
 
 
+    def _receive_int(self):
+        try:
+            buf = b''
+            while len(buf) < 4:  # Assuming the integer is 4 bytes long
+                data = self.client_socket.recv(4 - len(buf))
+                if not data:
+                    return None
+                buf += data
+            num = struct.unpack('!I', buf)[0]  # Network byte order (big-endian)
+            return num
+        except Exception as e:
+            print(f"Error receiving int: {e}")
+            return None
+
+    def _receive_string(self):
+        try:
+            string_size = self.receive_int()
+            if string_size is None:
+                return None
+
+            buf = b''
+            while len(buf) < string_size:
+                data = self.client_socket.recv(min(Client.buffer_size, string_size - len(buf)))
+                if not data:
+                    return None
+                buf += data
+            return buf.decode()
+        except Exception as e:
+            print(f"Error receiving string: {e}")
+            return None
+
+
     def receive_server_ack(self):
-        ack = self.client_socket.recv(Client.buffer_size).decode()
-        print(f"Server acknowledgement: {ack}")
+        ack = self._receive_string()
+        print(ack)
 
              
         

@@ -130,7 +130,7 @@ class Server():
             self.send_int(conn, self._utf8len(s))        # send the length of s in bytes
             conn.sendall(s.encode())
         except Exception as e:
-            print(f"Error sending server acknolwedgement: {e}")   
+            print(f"Error sending server acknowledgement: {e}")   
     
 
     def _send_server_ack(self, conn, msg):
@@ -139,6 +139,6 @@ class Server():
             print(s)
             self._send_string(conn, s)
         except Exception as e:
-            print(f"Error sending server acknolwedgement: {e}")
+            print(f"Error sending server acknowledgement: {e}")
 
 
