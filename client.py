@@ -52,8 +52,8 @@ class Client():
 
 
     def send_file(self, filename):
-        file_size = os.stat(filename).st_size
         try:
+            file_size = os.stat(filename).st_size
             self.send_int(file_size)        # send the size of the file
             self.send_int(len(filename))    # send the size of filename in bytes
             self.client_socket.sendall(filename.encode())  # send the file name first
@@ -65,7 +65,6 @@ class Client():
                         break
                     self.client_socket.sendall(bytes_read)
             print("File has been sent.")
-
         except Exception as e:
             print(f"Error sending file: {e}")
 
