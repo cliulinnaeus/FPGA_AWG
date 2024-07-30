@@ -250,7 +250,8 @@ class FPGA_AWG(Server):
         name = self.receive_string(conn)
         # if the name here and the name in json are different, replace the name in json by the name given
 
-        filename = self.receive_file(conn, FPGA_AWG.waveform_dir_path)            # save the config file to disk; filename does not contain abs path
+        # save file as name.json
+        filename = self.receive_file(conn, FPGA_AWG.waveform_dir_path, name=name)            # save the config file to disk; filename does not contain abs path
         file_path = os.path.join(FPGA_AWG.waveform_dir_path, filename).replace('\\', '/')
         # if name is not equal to json file's name field, update the json name 
         self._update_json_file(file_path, name)                 

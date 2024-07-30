@@ -64,7 +64,7 @@ class Server():
             return None
       
       
-    def receive_file(self, conn, dir_path):
+    def receive_file(self, conn, dir_path, name=None):
         """
         Returns filename received
         """
@@ -81,9 +81,11 @@ class Server():
                 return None
 
             filename = os.path.basename(filename)  # Convert abs path to just the file name
-
-            # Ensure the directory path ends with a separator
-            dir_path = os.path.join(dir_path, filename).replace('\\', '/')
+            if name != None:
+                dir_path = os.path.join(dir_path, name + '.json').replace('\\', '/')
+            else:
+                # Ensure the directory path ends with a separator
+                dir_path = os.path.join(dir_path, filename).replace('\\', '/')
             # 'wb' mode ensures that an existing file will be overwritten by the newly sent file
             with open(dir_path, 'wb') as file:
                 remaining_size = file_size
