@@ -86,7 +86,7 @@ class Client():
 
     def _receive_string(self):
         try:
-            string_size = self.receive_int()
+            string_size = self._receive_int()
             if string_size is None:
                 return None
 
