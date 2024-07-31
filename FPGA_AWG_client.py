@@ -72,6 +72,11 @@ class FPGA_AWG_client(Client):
         self.send_string("GET_STATE")
         self.receive_server_ack()
 
+    def set_trigger_mode(self, trig_mode):
+        self.send_string("SET_TRIGGER_MODE")
+        self.send_string(trig_mode)
+        self.receive_server_ack()
+
     def start_program(self, name):
         self.send_string("START_PROGRAM")
         self.send_string(name)
@@ -82,9 +87,6 @@ class FPGA_AWG_client(Client):
     def check_state(self):
         self.send_string("CHECK_STATE")
 
-    def set_trigger_mode(self, trig_mode):
-        self.send_string("SET_TRIGGER_MODE")
-        self.send_string(trig_mode)
         
         
 
