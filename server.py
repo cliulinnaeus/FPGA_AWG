@@ -137,7 +137,7 @@ class Server():
 
     def _send_server_ack(self, conn, msg):
         try:
-            s = f"Server acknowledgement: {msg}"
+            s = f"[Server acknowledgement]: {msg}"
             print(s)
             self._send_string(conn, s)
         except Exception as e:

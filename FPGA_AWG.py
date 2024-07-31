@@ -46,7 +46,7 @@ class FPGA_AWG(Server):
         self.soc = QickSoc()
         self.soccfg = self.soc
         self.awg_prog = None         # AWGProgram to be created during compilation
-
+        self.trig_mode = "internal"  # default this to internal 
                 
 
     def _load_files_to_lst(self, dir_path):
@@ -115,6 +115,7 @@ class FPGA_AWG(Server):
         """
 
         # bind server to server port    
+        print(f"--------------- Server Starting... ---------------")
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind((FPGA_AWG.host, FPGA_AWG.port))
         self.server_socket.listen()
@@ -307,6 +308,7 @@ class FPGA_AWG(Server):
                 msg = f"Error: {e}"
                 self._send_server_ack(conn, msg)
     
+    
     def delete_program(self, conn):
         if self.state != "listening":
             msg = f"Can't delete file: current AWG state is {self.state}."
@@ -337,13 +339,12 @@ class FPGA_AWG(Server):
         
         trig_mode = self.receive_string(conn)
         if trig_mode != "internal" and trig_mode != "external":
-            msg = f"trig_mode can only be 'internal' or 'external'."
+            msg = f"Trigger can only be 'internal' or 'external'."
             self._send_server_ack(conn, msg)
             return     
         self.trig_mode = trig_mode
-        msg = f"Trigger mode is successfully set to {trig_mode}."
+        msg = f"Trigger is set to {trig_mode}."
         self._send_server_ack(conn, msg)
-        # TODO: set the trigger mode for AWGProgram
 
 
             
