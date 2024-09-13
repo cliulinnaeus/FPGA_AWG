@@ -45,8 +45,8 @@ class FPGA_AWG(Server):
         # initialize FPGA: load the tproc onto FPGA
         self.soc = QickSoc()
         self.soccfg = self.soc
-        self.awg_prog = None         # AWGProgram to be created during compilation
-        self.trig_mode = "internal"  # default this to internal 
+        self.awg_prog = AWGProgram(self.soccfg, self.soc)
+        self.trig_mode = "internal"  # defaults this to internal 
                 
 
     def _load_files_to_lst(self, dir_path):
@@ -54,7 +54,6 @@ class FPGA_AWG(Server):
         Helper function to load json files from a directory into a list.
         Returns a list containing the names of all json files stored in current directory_path
         """
-
         file_lst = []
         if os.path.exists(dir_path):
             for filename in os.listdir(dir_path):
@@ -114,7 +113,7 @@ class FPGA_AWG(Server):
            
         """
 
-        # bind server to server port    
+        # bind server to socket    
         print(f"--------------- Server Starting... ---------------")
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind((FPGA_AWG.host, FPGA_AWG.port))
@@ -127,7 +126,6 @@ class FPGA_AWG(Server):
             try:
                 conn, addr = self.server_socket.accept()
                 print(f"Connected by {addr}")
-
 
                 # loop to process commands 
                 while True:
@@ -183,8 +181,7 @@ class FPGA_AWG(Server):
 
                     except Exception as e:
                         print(f"Error: {e}")
-                        break                    
-                
+                        break                   
                 
             except Exception as e:
                 conn.close()
@@ -213,7 +210,7 @@ class FPGA_AWG(Server):
 
     def set_state(self, state):
         """
-        set the AWG into server listening mode or firing mode 
+        set the AWG into listening state or firing state
         """        
         self.state = state
     
@@ -283,10 +280,9 @@ class FPGA_AWG(Server):
                 self._send_server_ack(conn, msg)
             except Exception as e:
                 msg = f"Error: {e}"
-                self._send_server_ack(conn, msg)
-                
+                self._send_server_ack(conn, msg)               
 
-    
+
     def delete_envelope_data(self, conn):
         if self.state != "listening":
             msg = f"Can't delete file: current AWG state is {self.state}."
@@ -367,11 +363,6 @@ class FPGA_AWG(Server):
         print("-----------------------ready to fire pulse---------------------------")
 
 
-
-    def set_to_listening_state(self):
-        if self.state != "firing" or self.state != "starting":
-            raise Exception(f"Switch state failed: trying to switch to listening state when current state is {self.state}")    
-        self.set_state("listening")
     
 
     # how to get rid of the initial delay time when running the program?
@@ -380,8 +371,55 @@ class FPGA_AWG(Server):
         Start the Qick program. At this point, all the registers are already set and envelope memory loaded
         """
 
+        """
+        When start program is called, server switches to the firing mode and the following functions can be ran
+
+        get_state():
+            this is simple, just have a second thread func the AWGProgram, and the main thread return state
+        stop_program():
+            not so simple. When ran, it should prompt the other thread to run stop_program and to back to the listening mode
+
+
+
+        External mode: 
+            when receives a trigger, it uploads the sweep parameter and pulse
+            to do it, at the end of every pulse (at the end of the whole sequence specified by prog_cfg),
+            update with mathi the parameter that should be sweeped. I should allow multiple parameters to
+            be sweeped, and give the user the option to choose if they just want to sweep one
+            to define the sweeped parameter, we should just allow the user to define sweep param in the 
+            prog_cfg
+            for envelope, I think it is the best to define them in wf_cfg instead of in prog_cfg. Just put
+            idata and qdata in the json file.
+
+            Let's say 
+
+
+
+
+
+
+
+
+
+
+
+
+
+        """
+        
 
         prog_name = self.receive_string(conn)
+        if prog_name not in self.program_lst:
+            msg = f"Program {prog_name} is not found in program list."
+            self._send_server_ack(conn, msg)
+            return
+
+        # disallows all uploads and deletions and trigger set commands during firing state
+        self.set_state("firing")
+        
+        
+
+
         # TODO: correctly configure all pulse, compile program, and run
 
         # find the file with prog_name, read json
@@ -389,10 +427,10 @@ class FPGA_AWG(Server):
         # link each pulse to it's respective waveform envelope
         # for program_structure, generate the asm code for the program structure of each channel 
 
-        self.awg_prog = AWGProgram(self.soccfg, self.soc)
 
         # TODO: write AWGProgram.compile_awg_program(prog_name)
-        self.awg_prog.compile_awg_program(prog_name)     # save as an AWGProgram object
+        # TODO: get file path prog_path from prog_name
+        self.awg_prog.compile_awg_program(prog_path)     # save as an AWGProgram object
         self.awg_prog.config_all(self.soc)               # soc loads all parameters into registers and waveform data into PL memory
         self.soc.start_src(self.trig_mode)               # reset the trigger mode
 
@@ -409,6 +447,27 @@ class FPGA_AWG(Server):
         """
         stops currently running program and set output of all generators to 0
         """
+        # assumes the FPGA is currently in the listening state
+        if self.state != "firing":
+            msg = f"FPGA is not firing pulses: current AWG state is {self.state}."
+            self._send_server_ack(conn, msg)
+            return
+        
+        # do i really need to have the two states? 
+        # to switch back to listening, there are two cases: 
+            # 1. the client calls stop_program from a started program
+            # 2. the program stops itself and automatically switches back to listening mode
+                    # how can a program know that it is stopped? 
+        
+
+
+        # 
+        
+
+
+
+
+
         pass
 
     def shutdown(self):

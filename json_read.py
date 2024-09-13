@@ -19,7 +19,7 @@ def load_files_to_dict(directory_path):
     return file_dict
 
 
-dir_path = "./"
+dir_path = "./program_cfg/test_program.json"
 
 d = load_files_to_dict(dir_path)
 print(d)

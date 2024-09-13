@@ -24,6 +24,16 @@ class AWGProgram(QickProgram):
         return idata, qdata
     
     
+
+
+    def compile_awg_program(self, prog_path):
+        # need t
+
+
+        return 
+
+
+
     def initialize(self):
         """
         To run once before body
