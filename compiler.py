@@ -7,10 +7,9 @@ class Compiler():
 
     # the ZERO reg of each page indicate number 0 and should not be used
     # table to indicate which register on which page is used
-    reg_lookup_table = []
     NUM_REG = 32    # number of registers per page
     NUM_PAGE = 8    # page 0 is reserved for loop counter
-    REG_PTR_STEP = 6    # reg pointer increment step size, i.e. number of registers for each pulse - 1 
+    REG_PTR_STEP = 6    # reg pointer increment step size, i.e. number of registers for each pulse
     PAGE_PTR_STEP = 1
     NUM_CHANNELS = 7
 
@@ -24,8 +23,8 @@ class Compiler():
         # samps_per_clk is default 16
         self.samps_per_clk = self.awg_prog.soccfg['gens'][0]['samps_per_clk']
         self.maxv = self.awg_prog.soccfg['gens'][0]['maxv']
-        # t register loop up table. key: pulse_name, value: pointer for t register
-        self.t_reg_LUT = {}
+        # register look up table. key: pulse_name, value: pointer for the first register (freq)
+        self.reg_LUT = {}
 
     def parse_prog_line(self, prog_line):
         """
@@ -152,10 +151,10 @@ class Compiler():
         But the SET instruction can only take registers on the same page, so correctly allocating the registers for flat_top is 
         not straightforward. On the other hand, one can just define three pulses and put them together to form the flat_top pulse.
         """
-        # save the time register pointer to LUT
+        # save the first register pointer to LUT
         # time register should be
         # $6, $12, $18, $24, $30
-        self.t_reg_LUT[pulse_name] = self._curr_reg_ptr + 5
+        self.reg_LUT[pulse_name] = self._curr_reg_ptr
         # increment the register and page pointer
         self._step_reg_ptr()
 
@@ -165,6 +164,8 @@ class Compiler():
         """
         Compute the pulse time to play each pulse on each channel
         """
+        # iterate through the IR, for each pulse, run SET command 
+        
 
         return
     
