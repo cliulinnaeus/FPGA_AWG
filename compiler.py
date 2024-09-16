@@ -87,7 +87,7 @@ class Compiler():
     def compile(self, prog_name):
         """
         Compilation consists of the following steps:
-        tokemize pulses, create prog IR (intermediate representation), load pulse param 
+        tokenize pulses, create prog IR (intermediate representation), load pulse param 
         into registers, schedule pulse play time
         """
         prog_cfg = self.load_program_cfg(prog_name)
@@ -288,9 +288,20 @@ class Scheduler():
         q = PriorityQueue(maxsize=Compiler.NUM_CHANNELS)
         for ch, next_pulse_gen in self.gen_dict.items():
             # enqueue next pulse name by starting time
-            q.put((self.curr_times[ch], next(next_pulse_gen)))
+            q.put((self.curr_times[ch], (ch, next(next_pulse_gen))))
         # advance curr_times here
-        q.get()
+        ch, token = q.get()
+        # if it's a number, then it means to wait on that channel
+        if token.isnumeric():
+            self.curr_times[ch] += int(token)
+
+        # if it's a pulse name
+        else:
+            self.curr_times[ch] += duration
+            yield [token, ch, start_time]
+
+        # enqueue the next pulse
+        q.put(())
 
         next_pulse = next(self.next_pulse(tokens))
 
@@ -303,6 +314,9 @@ class Scheduler():
         return
 
     
+
+
+
     def next_token(self, line_token_lst): 
         """
         Helper function to convert a token list to a generator
@@ -314,6 +328,7 @@ class Scheduler():
         """
         Gives the next pulse in the line_token_lst for just one channel
         uses yield instead of return so that the for loop can be continued
+        yields the string name of the pulse to be played or the wait time
         """
         next_token_gen = self.next_token(tokens)
 
