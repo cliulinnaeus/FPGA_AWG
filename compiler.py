@@ -1,15 +1,42 @@
 from qick import *
 from FPGA_AWG import waveform_dir_path, envelope_dir_path, program_dir_path
 import json
-
+from queue import PriorityQueue
 
 class Compiler():
+
+    """
+    Page 
+        $0: 0 
+        $1: freq
+        $2: 
+        ...
+        $5: mode code
+        $6: time for this pulse
+        ...
+        $31: not used
+
+    Rules to play pulses:
+    1. all 6 pulse registers must be on the same page
+    2. each channel has its own envelope memory
+
+    special cases:
+    1. pulse "X" is played on multiple channels at different times with potentially overlaps
+        You can schedule the earliest X pulse to be played, then change time register, play again on a diff 
+        ch. Once a SET instruction is ran, you can change the reg values even the pulse is not finished playing
+    2. 
+
+    """
+
+
 
     # the ZERO reg of each page indicate number 0 and should not be used
     # table to indicate which register on which page is used
     NUM_REG = 32    # number of registers per page
     NUM_PAGE = 8    # page 0 is reserved for loop counter
     REG_PTR_STEP = 6    # reg pointer increment step size, i.e. number of registers for each pulse
+                        # there are 6 regs per pulse, here the time reg is excluded 
+                        # instead, the last reg of each page is used as the time reg for that channel
     PAGE_PTR_STEP = 1
     NUM_CHANNELS = 7
 
@@ -160,12 +187,15 @@ class Compiler():
 
 
 
-    def schedule_pulse_time():
+    def schedule_pulse_time(self, ):
         """
         Compute the pulse time to play each pulse on each channel
         """
         # iterate through the IR, for each pulse, run SET command 
         
+
+
+
 
         return
     
@@ -203,4 +233,99 @@ class Compiler():
         return pulse_cfg
 
 
+class Scheduler():
+    """
+    contains a list of channels
+    each channel has a time property 
+    needs to compile pulses across multiple channels into a single line
+    channel.time is the time at which the next pulse is played immediately
+
+    need to sort all events based on their start time across diff channels
+    """
+
+
+    def __init__(self, ir):
+
+        self.ir = ir
+        # dict to keep track of current pulse start time at each channel
+        # key: ch, value: start time of next pulse 
+        self.curr_times = {}
+        # init curr_time dict. use in ir instead of ir.keys() because it's faster
+        for ch in self.ir:
+            self.curr_times[ch] = 0
+        # dict for generator list for getting next pulse
+        self.gen_dict = {}
+        # create next pulse generator for each channel
+        for ch, tokens in self.ir.items():
+            self.gen_dict[ch] = self.next_pulse(tokens)
+
+    
+    def schedule_next(self):
+        """
+        when called, gives the name of the next pulse,
+        time it is played, and the channel it is played on
+        this should update all channel timers 
+        returns the one with the smallest timer value
+
+        there should be a function that converts each line to the 
+        next pulse it outputs 
+
+        IR: intermediate representation, is a dict of token list corresponding to each diff channels
+            key: ch, value: token list
         
+        loop:
+        calls next_pulse on each channel and save them to priority queue
+        advance timer on each channel
+        dequeue once and make asm
+        enqueue the next one
+
+        yields (next_pulse_name, ch, start_time)
+        
+        """
+
+        # fix size to be number of channels, as there can only be this number of pulses
+        # played at the same time
+        q = PriorityQueue(maxsize=Compiler.NUM_CHANNELS)
+        for ch, next_pulse_gen in self.gen_dict.items():
+            # enqueue next pulse name by starting time
+            q.put((self.curr_times[ch], next(next_pulse_gen)))
+        # advance curr_times here
+        q.get()
+
+        next_pulse = next(self.next_pulse(tokens))
+
+        q.put()
+
+
+
+
+
+        return
+
+    
+    def next_token(self, line_token_lst): 
+        """
+        Helper function to convert a token list to a generator
+        """
+        for token in line_token_lst:
+            yield token
+
+    def next_pulse(self, tokens):
+        """
+        Gives the next pulse in the line_token_lst for just one channel
+        uses yield instead of return so that the for loop can be continued
+        """
+        next_token_gen = self.next_token(tokens)
+
+        for token in next_token_gen:
+            if token == "loop":
+                # make generator step next to get loop_count
+                loop_count = next(next_token_gen)
+                # loop body should be a string rep of list
+                loop_body_tokens = parse_prog_line(next(next_token_gen))
+                # use yield instead of return so that for loop can be continued
+                for _ in range(loop_count):
+                    yield from self.next_pulse(loop_body_tokens)
+            else:
+                # handle pulse 
+                yield token
