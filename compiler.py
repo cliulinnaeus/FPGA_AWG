@@ -52,6 +52,12 @@ class Compiler():
         self.maxv = self.awg_prog.soccfg['gens'][0]['maxv']
         # register look up table. key: pulse_name, value: pointer for the first register (freq)
         self.reg_LUT = {}
+        # pulse length look up table. key: pulse name, value: pulse length in # clk cycles
+        self.pulse_length_LUT = {}
+        # pulse style look up table (const, arb, buffer). key: pulse name, value: style
+        # this is used by the scheduler to determine whether the pulse needs to use special addr register
+        self.pulse_style_LUT = {}
+
 
 
     def tokenize(self, prog_line):
@@ -127,14 +133,14 @@ class Compiler():
         return token.startswith('[') and token.endswith(']')
 
 
-    def list_all_pulses(self, tokens_set, tokens_lst):
+    def list_all_pulses(self, tokens_set, tokens):
         """
         TOKENS_SET: an empty set to store all pulse names
         TOKENS_LST: the output of tokenize (for one channel)
 
-        Modifies tokens_set
+        Modifies tokens_set by adding pulse name from tokens_lst into tokens_set
         """
-        for t in tokens_lst:
+        for t in tokens:
             # loop body is not tokenize, so it needs to be further tokenized
             if self._is_loop_body(t):
                 self.list_all_pulses(tokens_set, self.tokenize(t))
@@ -174,22 +180,41 @@ class Compiler():
         """
         prog_cfg = self.load_program_cfg(prog_name)
         prog_structure = prog_cfg["prog_structure"]
-        # set of pulse names and wait time 
+        # create a set of pulse names across all channels for allocating pulse param registers
         token_set = set()
+        tokens_dict = {}
         for ch, prog_line in prog_structure.items():
-            tokens_lst = self.tokenize(prog_line)    # tokenize each prog line 
-            self.list_all_pulses(token_set, tokens_lst)    # list all appeared pulse names in token_set
+            tokens = self.tokenize(prog_line)    # tokenize each prog line 
+            # list_all_pulses also recursively tokenize loop bodies
+            self.list_all_pulses(token_set, tokens)    # list all appeared pulse names in token_set
+            tokens_dict[ch] = tokens    # saves tokens at each ch for scheduler
         
         # generate asm code for allocate registers for each pulse that appeared across all channels
         for pulse_name in token_set:
-            self.alloc_registers(pulse_name)
+            pulse_cfg = self.load_pulses_cfg(pulse_name)
+            # save the pulse length to LUT
+            self.pulse_length_LUT[pulse_name] = pulse_cfg["length"]
+            self.pulse_style_LUT[pulse_name] = pulse_cfg["style"]
+            # generate asm code
+            self.alloc_registers(pulse_cfg)
         
         # run the scheduler to generate asm code for running pulses according to prog structure
-        self.schedule_pulse_time()
+        scheduler = Scheduler(self, tokens_dict)
+        scheduler_generator = scheduler.schedule_next()
+        for fire_pulse_params in scheduler_generator:
+            [ch, start_time, pulse_name] = fire_pulse_params
+            self.fire_pulse(ch, start_time, pulse_name)
+        p.end()
+
+
+
+    def fire_pulse(self, ch, start_time, pulse_name):
+        """
+        Generate asm code for firing pulse at ch at start_time
+        """
 
 
         return
-
 
 
 
@@ -232,7 +257,6 @@ class Compiler():
             mc = p.get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel="dds", length=length)
             p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length = {mc % 2**16} ')
         elif style == 'arb':
-
             # this block of codes below performs a shitty trick - saves the memory on addr of 
             # each ch 
 
@@ -261,25 +285,11 @@ class Compiler():
         not straightforward. On the other hand, one can just define three pulses and put them together to form the flat_top pulse.
         """
         # save the first register pointer to LUT
-        # time register should be
-        # $6, $12, $18, $24, $30
+        # time register should be $6, $12, $18, $24, $30
         self.reg_LUT[pulse_name] = self._curr_reg_ptr
         # increment the register and page pointer
         self._step_reg_ptr()
 
-
-
-    def schedule_pulse_time(self, ):
-        """
-        Compute the pulse time to play each pulse on each channel
-        """
-        # iterate through the IR, for each pulse, run SET command 
-        
-
-
-
-
-        return
     
 
     def load_program_cfg(self, prog_name):
@@ -291,6 +301,7 @@ class Compiler():
         with open(file_path, 'rb' as file):
             prog_cfg = json.load(file)
         return prog_cfg    # a list of numbers
+
 
 
     def load_envelope_data(self, env_name):
@@ -326,19 +337,21 @@ class Scheduler():
     """
 
 
-    def __init__(self, ir):
+    def __init__(self, compiler, tokens_dict):
 
-        self.ir = ir
+        self.compiler = compiler
+        # key: ch, value: tokens 
+        self.tokens_dict = tokens_dict
         # dict to keep track of current pulse start time at each channel
         # key: ch, value: start time of next pulse 
         self.curr_times = {}
         # init curr_time dict. use in ir instead of ir.keys() because it's faster
-        for ch in self.ir:
+        for ch in self.tokens_dict:
             self.curr_times[ch] = 0
-        # dict for generator list for getting next pulse
+        # dict that stores one generator for each channel
         self.gen_dict = {}
         # create next pulse generator for each channel
-        for ch, tokens in self.ir.items():
+        for ch, tokens in self.tokens_dict.items():
             self.gen_dict[ch] = self.next_pulse(tokens)
 
     
@@ -365,39 +378,36 @@ class Scheduler():
         
         """
 
-        # fix size to be number of channels, as there can only be this number of pulses
         # played at the same time
-        q = PriorityQueue(maxsize=Compiler.NUM_CHANNELS)
+        q = PriorityQueue()
+
+        # first, save first pulse from all channels into the queue, advance each timer accordingly
         for ch, next_pulse_gen in self.gen_dict.items():
-            # enqueue next pulse name by starting time
-            q.put((self.curr_times[ch], (ch, next(next_pulse_gen))))
-        # advance curr_times here
-        ch, token = q.get()
-        # if it's a number, then it means to wait on that channel
-        if token.isnumeric():
-            self.curr_times[ch] += int(token)
+            # enqueue the first token that's not a wait time, which is a pulse name
+            for token in next_pulse_gen:                
+                if token.isnumeric():    # if it's a number, it's a wait time
+                    self.curr_times[ch] += int(token)
+                else:    # if it's a pulse name
+                    q.put((self.curr_times[ch], (ch, token)))
+                    break
+        
+        while True:
+            # get the earliest pulse (q.get() returns (prio, item))
+            (ch, pulse_name) = q.get()[1]
+            # yield channel, start time, pulse name
+            yield [ch, self.curr_times[ch], pulse_name]
+            # update new pulse start time
+            self.curr_times[ch] += self.compiler.pulse_length_LUT[pulse_name]
+            if q.empty():
+                break
 
-        # if it's a pulse name
-        else:
-            self.curr_times[ch] += duration
-            yield [token, ch, start_time]
-
-        # enqueue the next pulse
-        q.put(())
-
-        next_pulse = next(self.next_pulse(tokens))
-
-        q.put()
-
-
-
-
-
-        return
-
-    
-
-
+            # on the current channel enqueue the first token that's not a wait time, which is a pulse name
+            for token in self.gen_dict[ch]:                
+                if token.isnumeric():    # if it's a number, it's a wait time
+                    self.curr_times[ch] += int(token)
+                else:    # if it's a pulse name
+                    q.put((self.curr_times[ch], (ch, token)))
+                    break
 
     def next_token(self, line_token_lst): 
         """
@@ -412,14 +422,14 @@ class Scheduler():
         uses yield instead of return so that the for loop can be continued
         yields the string name of the pulse to be played or the wait time
         """
-        next_token_gen = self.next_token(tokens)
+        tokens = iter(tokens)
 
-        for token in next_token_gen:
-            if token == "loop":
+        for t in tokens:
+            if t == "loop":
                 # make generator step next to get loop_count
-                loop_count = next(next_token_gen)
+                loop_count = int(next(tokens))
                 # loop body should be a string rep of list
-                loop_body_tokens = parse_prog_line(next(next_token_gen))
+                loop_body_tokens = self.compiler.tokenize(next(next_token_gen))
                 # use yield instead of return so that for loop can be continued
                 for _ in range(loop_count):
                     yield from self.next_pulse(loop_body_tokens)
@@ -427,9 +437,4 @@ class Scheduler():
                 # handle pulse 
                 yield token
 
-
-class Pulse():
-    def __init__(self, name, t_duration):
-        self.name = name
-        self.t_duration = t_duration
         
