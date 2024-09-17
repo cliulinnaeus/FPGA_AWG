@@ -97,8 +97,7 @@ class Compiler():
                             result.append(curr_token)
                     # otherwise just accumulate curr_token
                     else:
-                        curr_token += c
-                    
+                        curr_token += c                    
             else:
                 # read loop count until the first "," in loop
                 while c != ",":
@@ -123,6 +122,29 @@ class Compiler():
         return result
 
 
+    def _is_loop_body(self, token):
+        # checks if token is loop body, i.e. []
+        return token.startswith('[') and token.endswith(']')
+
+
+    def list_all_pulses(self, tokens_set, tokens_lst):
+        """
+        TOKENS_SET: an empty set to store all pulse names
+        TOKENS_LST: the output of tokenize (for one channel)
+
+        Modifies tokens_set
+        """
+        for t in tokens_lst:
+            # loop body is not tokenize, so it needs to be further tokenized
+            if self._is_loop_body(t):
+                self.list_all_pulses(tokens_set, self.tokenize(t))
+            else:
+                # if t is a number, this means to wait, so don't save it in the set
+                if not t.isnumeric() and t != "loop":
+                    tokens_set.add(t)
+
+
+
     def _step_reg_ptr(self):
         """
         if next 6 registers exceeds the number of registers per page, 
@@ -133,6 +155,7 @@ class Compiler():
             self._step_page_ptr()
         else:
             self._curr_reg_ptr  = self._curr_reg_ptr + Compiler.REG_PTR_STEP
+
 
     def _step_page_ptr(self):
         """
@@ -154,10 +177,10 @@ class Compiler():
         # set of pulse names and wait time 
         token_set = set()
         for ch, prog_line in prog_structure.items():
-            line_token_lst = self.parse_prog_line(prog_line)
-            token_set.update(line_token_lst)    # add to tokens to set to remove duplicate
-        # TODO: need to handle nested loops and wait time separately
-        # load pulses into registers first; this generates a bunch of REGWI asm instructions
+            tokens_lst = self.tokenize(prog_line)    # tokenize each prog line 
+            self.list_all_pulses(token_set, tokens_lst)    # list all appeared pulse names in token_set
+        
+        # generate asm code for allocate registers for each pulse that appeared across all channels
         for pulse_name in token_set:
             self.alloc_registers(pulse_name)
         
