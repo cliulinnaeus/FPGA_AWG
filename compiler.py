@@ -53,16 +53,75 @@ class Compiler():
         # register look up table. key: pulse_name, value: pointer for the first register (freq)
         self.reg_LUT = {}
 
-    def parse_prog_line(self, prog_line):
+
+    def tokenize(self, prog_line):
         """
         parse the prog_line into a list of string "X", "Y" (pulse names)
-        remove duplicate 
+        e.g.
+        INPUT: "[loop(2,[X, loop(3,[10, Y]),Y,Z]), X]"
+        OUTPUT: ['loop', '2', '[X,loop(3,[10,Y]),Y,Z]', 'X']
+
+        INPUT: "[loop(10, [X, Y, X, Y, Y, X, Y, X]), X]"
+        OUTPUT: ['loop', '10', '[X,Y,X,Y,Y,X,Y,X]', 'X']
+
+        INPUT: "[X, Y, X, Y, Y, X, Y, X]"
+        OUTPUT: ['X', 'Y', 'X', 'Y', 'Y', 'X', 'Y', 'X']
         """
-        token_lst = prog_line.strip("[]").replace(" ", "").split(",")
-        # converts all the number strings to int
-        token_lst = [int(item) if item.isdigit() else item for item in token_lst]
-        # token_set = set(token_lst)    # remove duplicate items by converting to set
-        return token_lst
+        # add special character "\n" to indicate end of the line
+        EOL_char = '\n'
+        prog_line = prog_line.strip("[]").replace(" ", "") + EOL_char
+        prog_line = iter(prog_line)
+        in_loop = False
+        curr_token = ""
+        open_parenthesis = 0
+        result = []
+        for c in prog_line:
+            if not in_loop:
+                if c == ",":
+                    if curr_token != "":
+                        result.append(curr_token)
+                        curr_token = ""   
+                    # the case where it just come out of the loop
+                    else:
+                        pass
+                elif curr_token == "loop":
+                    # c must be "("
+                    result.append("loop")
+                    curr_token = ""
+                    in_loop = True
+                    open_parenthesis += 1
+                else:
+                    # detect end of prog_line
+                    if c == EOL_char:
+                        if curr_token != "":
+                            result.append(curr_token)
+                    # otherwise just accumulate curr_token
+                    else:
+                        curr_token += c
+                    
+            else:
+                # read loop count until the first "," in loop
+                while c != ",":
+                    curr_token += c
+                    c = next(prog_line)
+                result.append(curr_token)    # save loop count
+                curr_token = ""
+                # read until there are no open parenthesis, then we are out of the loop
+                for c in prog_line:
+                    if c == "(":
+                        open_parenthesis += 1
+                    elif c == ")":
+                        open_parenthesis -= 1
+                        
+                    if open_parenthesis > 0:
+                        curr_token += c
+                    else:
+                        result.append(curr_token)
+                        curr_token = ""
+                        in_loop = False
+                        break
+        return result
+
 
     def _step_reg_ptr(self):
         """
@@ -326,7 +385,7 @@ class Scheduler():
 
     def next_pulse(self, tokens):
         """
-        Gives the next pulse in the line_token_lst for just one channel
+        Gives the next pulse for just one channel. Unwraps nested loops
         uses yield instead of return so that the for loop can be continued
         yields the string name of the pulse to be played or the wait time
         """
@@ -344,3 +403,10 @@ class Scheduler():
             else:
                 # handle pulse 
                 yield token
+
+
+class Pulse():
+    def __init__(self, name, t_duration):
+        self.name = name
+        self.t_duration = t_duration
+        
