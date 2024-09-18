@@ -50,10 +50,16 @@ class Compiler():
         # samps_per_clk is default 16
         self.samps_per_clk = self.awg_prog.soccfg['gens'][0]['samps_per_clk']
         self.maxv = self.awg_prog.soccfg['gens'][0]['maxv']
+        
         # register look up table. key: pulse_name, value: pointer for the first register (freq)
         self.reg_LUT = {}
+
+        # register page look up table. key: pulse_name, value: pointer for the register page
+        self.page_LUT = {}
+
         # pulse length look up table. key: pulse name, value: pulse length in # clk cycles
         self.pulse_length_LUT = {}
+
         # pulse style look up table (const, arb, buffer). key: pulse name, value: style
         # this is used by the scheduler to determine whether the pulse needs to use special addr register
         self.pulse_style_LUT = {}
@@ -197,13 +203,17 @@ class Compiler():
             self.pulse_style_LUT[pulse_name] = pulse_cfg["style"]
             # generate asm code
             self.alloc_registers(pulse_cfg)
-        
+
+        # wait for all the pulse params to be loaded
+        self.awg_prog.synci(200)
+
         # run the scheduler to generate asm code for running pulses according to prog structure
         scheduler = Scheduler(self, tokens_dict)
         scheduler_generator = scheduler.schedule_next()
         for fire_pulse_params in scheduler_generator:
             [ch, start_time, pulse_name] = fire_pulse_params
             self.fire_pulse(ch, start_time, pulse_name)
+
         p.end()
 
 
@@ -212,10 +222,29 @@ class Compiler():
         """
         Generate asm code for firing pulse at ch at start_time
         """
+        # get correct addr register
+        # correctly set start_time register
+        p = self.awg_prog
+        pulse_style = self.pulse_style_LUT[pulse_name]
+        pulse_reg_ptr = self.reg_LUT[pulse_name]
+        pulse_page_ptr = self.page_LUT[pulse_name]
+
+        freq_reg = pulse_reg_ptr
+        phase_reg = pulse_reg_ptr + 1
+        gain_reg = pulse_reg_ptr + 3
+
+        if pulse_style == "const":
+            addr_reg = 0
+        else: 
+            addr_reg = pulse_reg_ptr + 2
+        
+        mc_reg = pulse_reg_ptr + 4
+        time_reg = pulse_reg_ptr + 5
 
 
-        return
-
+        p.safe_regwi(pulse_page_ptr, time_reg, start_time, comment=f'time = {start_time}')       
+        
+        p.set(ch, pulse_page_ptr, freq_reg, phase_reg, addr_reg, gain_reg, mc_reg, time_reg)
 
 
     def alloc_registers(self, pulse_cfg):
@@ -247,7 +276,7 @@ class Compiler():
         # safe_regwi make sure successful write if a number is more than 30 bits (see qick.asm_v1)
         p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr, freq, comment=f"freq = {freq}")
         p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 1, phase, comment=f"phase = {phase}")
-        p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 2, gain, comment=f"gain = {gain}")
+        p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 3, gain, comment=f"gain = {gain}")
 
         # set 
         if style == 'const':
@@ -270,7 +299,7 @@ class Compiler():
                 # I need to save diff addr on each
             addr = p.envelopes[0]['envs'][pulse_name]["addr"]
             # write the correct addr to register
-            p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 3, addr, comment=f"pulse {pulse_name} mem addr = {addr}")
+            p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 2, addr, comment=f"pulse {pulse_name} mem addr = {addr}")
             
             # make the mode code
             mc = p.get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel=outsel, length=env_length)
@@ -287,6 +316,8 @@ class Compiler():
         # save the first register pointer to LUT
         # time register should be $6, $12, $18, $24, $30
         self.reg_LUT[pulse_name] = self._curr_reg_ptr
+        # save the register page associated to this pulse
+        self.page_LUT[pulse_name] = self._curr_page_ptr
         # increment the register and page pointer
         self._step_reg_ptr()
 
