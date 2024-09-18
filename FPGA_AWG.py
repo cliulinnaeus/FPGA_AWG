@@ -345,25 +345,6 @@ class FPGA_AWG(Server):
         self._send_server_ack(conn, msg)
 
 
-            
-    def set_to_firing_state(self):
-        if self.state != "listening":
-            raise Exception(f"Switch state failed: trying to switch to firing state when current state is {self.state}")
-        self.server.stop()
-        self.set_state("firing")
-        # instantiate AWGProgram, connect to FPGA's tproc and wait for configurating registers and pulse envelopes
-        
-        # TODO: need to write a parser for self.config from commands 
-        # TODO: how to write multiple waveforms? 
-        if not self.awg_prog: 
-            self.awg_prog = AWGProgram(self.soccfg, self.config)         # instantiate Qick AWGProgram
-        print("Switched to firing state.")
-        self.awg_prog.config_all(self.soc)                               # load parameters into registers, load waveform data to PL memory
-        print("Finished loading pulse parameters to registers and waveform data to memory.")
-        self.soc.start_src(self.trig_mode)                          # set trigger mode for the tproc. "internal" or "external"
-        print(f"Trigger mode is set to: {self.trig_mode}\n")
-        print("-----------------------ready to fire pulse---------------------------")
-
 
 
     # how to get rid of the initial delay time when running the program?
@@ -406,13 +387,18 @@ class FPGA_AWG(Server):
 
         # compile program and save asm into self.awg_prog
         # whenever a new program is uploaded, self.awg_prog should be reinit
+        print("1")
         self.compiler.compile(prog_name)
-        
-        self.awg_prog.config_all(self.soc)               # soc loads all parameters into registers and waveform data into PL memory
-        self.soc.start_src(self.trig_mode)               # reset the trigger mode
+        print("2")
+        print(self.awg_prog.asm())
 
+        self.awg_prog.config_all(self.soc)               # soc loads all parameters into registers and waveform data into PL memory
+        print("3")
+        self.soc.start_src(self.trig_mode)               # reset the trigger mode
+        print("4")
         self.soc.start_tproc()                           # starts the tproc to run AWGProgram. Pulse will fire when trigger comes in "external" mode
                                                          # or will fire immediately in "internal" mode
+        print("5")
         msg = f"Program {prog_name} has started..."
         self._send_server_ack(conn, msg)
 
@@ -430,6 +416,7 @@ class FPGA_AWG(Server):
         
         # stop all generators
         self.soc.reset_gens()
+        # self.soc.stop_tproc()
         # reset awg program
         self.awg_prog = AWGProgram(self.soccfg, self.soc)
         self.set_state("listening")

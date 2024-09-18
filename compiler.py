@@ -1,5 +1,6 @@
 from qick import *
-from FPGA_AWG import waveform_dir_path, envelope_dir_path, program_dir_path
+# from FPGA_AWG import waveform_dir_path, envelope_dir_path, program_dir_path
+from FPGA_AWG import *
 import json
 from queue import PriorityQueue
 import numpy as np
@@ -186,11 +187,13 @@ class Compiler():
         """
         prog_cfg = self.load_program_cfg(prog_name)
         prog_structure = prog_cfg["prog_structure"]
-        nqz_dict = prog_cfg["nqz"]
-        # declare the nyquist zone that each channel will output mostly in
-        for ch, nqz in nqz_dict.items():
-            ch_number = ch[-1]
-            self.awg_prog.declare_gen(ch=ch_number, nqz=nqz) 
+        nqz_dict = prog_cfg.get("nqz")
+
+        if nqz_dict != None:
+            # declare the nyquist zone that each channel will output mostly in
+            for ch, nqz in nqz_dict.items():
+                ch_number = ch[-1]
+                self.awg_prog.declare_gen(ch=ch_number, nqz=nqz)
 
         
         # create a set of pulse names across all channels for allocating pulse param registers
@@ -250,7 +253,7 @@ class Compiler():
 
         p.safe_regwi(pulse_page_ptr, time_reg, start_time, comment=f'time = {start_time}')       
         
-        ch_number = ch[-1]
+        ch_number = int(ch[-1])
         p.set(ch_number, pulse_page_ptr, freq_reg, phase_reg, addr_reg, gain_reg, mc_reg, time_reg)
 
 
@@ -462,10 +465,7 @@ class Scheduler():
         this should update all channel timers 
         returns the one with the smallest timer value
 
-        there should be a function that converts each line to the 
-        next pulse it outputs 
-
-        IR: intermediate representation, is a dict of token list corresponding to each diff channels
+        tokens_dict: is a dict of token list corresponding to each diff channels
             key: ch, value: token list
         
         loop:
@@ -474,7 +474,7 @@ class Scheduler():
         dequeue once and make asm
         enqueue the next one
 
-        yields (next_pulse_name, ch, start_time)
+        yields (ch, start_time, next_pulse_name)
         
         """
 
