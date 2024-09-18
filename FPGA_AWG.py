@@ -1,5 +1,6 @@
 from qick import *
 from AWGProgram import *
+from compiler import *
 from server import *
 import os
 import json
@@ -47,7 +48,8 @@ class FPGA_AWG(Server):
         self.soccfg = self.soc
         self.awg_prog = AWGProgram(self.soccfg, self.soc)
         self.trig_mode = "internal"  # defaults this to internal 
-                
+        self.compiler = Compiler(self.awg_prog)        
+        
 
     def _load_files_to_lst(self, dir_path):
         """
@@ -161,7 +163,7 @@ class FPGA_AWG(Server):
                             self.start_program(conn)
 
                         elif command == "STOP_PROGRAM": 
-                            self.stop_program()
+                            self.stop_program(conn)
 
                         elif command == "GET_WAVEFORM_LIST":
                             self.get_waveform_lst(conn)
@@ -363,7 +365,6 @@ class FPGA_AWG(Server):
         print("-----------------------ready to fire pulse---------------------------")
 
 
-    
 
     # how to get rid of the initial delay time when running the program?
     def start_program(self, conn):
@@ -392,22 +393,8 @@ class FPGA_AWG(Server):
             idata and qdata in the json file.
 
             Let's say 
-
-
-
-
-
-
-
-
-
-
-
-
-
         """
         
-
         prog_name = self.receive_string(conn)
         if prog_name not in self.program_lst:
             msg = f"Program {prog_name} is not found in program list."
@@ -416,34 +403,22 @@ class FPGA_AWG(Server):
 
         # disallows all uploads and deletions and trigger set commands during firing state
         self.set_state("firing")
+
+        # compile program and save asm into self.awg_prog
+        # whenever a new program is uploaded, self.awg_prog should be reinit
+        self.compiler.compile(prog_name)
         
-        
-
-
-        # TODO: correctly configure all pulse, compile program, and run
-
-        # find the file with prog_name, read json
-        # for program_structure, for each appeared pulse name, search pulse_cfg and generate code to set registers
-        # link each pulse to it's respective waveform envelope
-        # for program_structure, generate the asm code for the program structure of each channel 
-
-
-        # TODO: write AWGProgram.compile_awg_program(prog_name)
-        # TODO: get file path prog_path from prog_name
-        self.awg_prog.compile_awg_program(prog_path)     # save as an AWGProgram object
         self.awg_prog.config_all(self.soc)               # soc loads all parameters into registers and waveform data into PL memory
         self.soc.start_src(self.trig_mode)               # reset the trigger mode
 
-        self.set_state("firing")                         # to indicate that the server will no longer listen to uploads or deletion        
-
         self.soc.start_tproc()                           # starts the tproc to run AWGProgram. Pulse will fire when trigger comes in "external" mode
                                                          # or will fire immediately in "internal" mode
-        print(f"Program {prog_name} has started...")
-
+        msg = f"Program {prog_name} has started..."
+        self._send_server_ack(conn, msg)
 
 
     
-    def stop_program(self):
+    def stop_program(self, conn):
         """
         stops currently running program and set output of all generators to 0
         """
@@ -453,22 +428,16 @@ class FPGA_AWG(Server):
             self._send_server_ack(conn, msg)
             return
         
-        # do i really need to have the two states? 
-        # to switch back to listening, there are two cases: 
-            # 1. the client calls stop_program from a started program
-            # 2. the program stops itself and automatically switches back to listening mode
-                    # how can a program know that it is stopped? 
-        
-
-
-        # 
-        
+        # stop all generators
+        self.soc.reset_gens()
+        # reset awg program
+        self.awg_prog = AWGProgram(self.soccfg, self.soc)
+        self.set_state("listening")
+        msg = f"Program is stopped. Server resumes listening..."
+        self._send_server_ack(conn, msg)
 
 
 
-
-
-        pass
 
     def shutdown(self):
         """
