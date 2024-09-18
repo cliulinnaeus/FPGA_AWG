@@ -1,7 +1,8 @@
 from qick import *
-from FPGA_AWG import waveform_dir_path, envelope_dir_path, program_dir_path
+# from FPGA_AWG import waveform_dir_path, envelope_dir_path, program_dir_path
 import json
 from queue import PriorityQueue
+import numpy as np
 
 class Compiler():
 
@@ -266,11 +267,17 @@ class Compiler():
         length = pulse_cfg["length"]
         i_data_name = pulse_cfg.get("i_data_name")
         q_data_name = pulse_cfg.get("q_data_name")
+        if i_data_name is not None:
+            i_data = self.load_envelope_data(i_data_name)
+            env_length = len(i_data) // self.samps_per_clk
+        else:
+            i_data = None
+        if q_data_name is not None:
+            q_data = self.load_envelope_data(q_data_name)
+            env_length = len(q_data) // self.samps_per_clk
+        else:
+            q_data = None
 
-        i_data = self.load_envelope_cfg(i_data_name)
-        q_data = self.load_envelope_cfg(q_data_name)
-
-        env_length = len(i_data) // self.samps_per_clk
 
         # load all params to registers
         # safe_regwi make sure successful write if a number is more than 30 bits (see qick.asm_v1)
@@ -283,7 +290,7 @@ class Compiler():
             # use addr 0 if style is const
             addr_reg = 0
             # make the mode code
-            mc = p.get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel="dds", length=length)
+            mc = self._get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel="dds", length=length)
             p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length = {mc % 2**16} ')
         elif style == 'arb':
             # this block of codes below performs a shitty trick - saves the memory on addr of 
@@ -302,11 +309,11 @@ class Compiler():
             p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 2, addr, comment=f"pulse {pulse_name} mem addr = {addr}")
             
             # make the mode code
-            mc = p.get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel=outsel, length=env_length)
+            mc = self._get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel=outsel, length=env_length)
             p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length = {mc % 2**16} ')
             
-        elif style == 'buffer':
-           pass
+#         elif style == 'buffer':
+#            pass
 
         """I decide to not include flat_top as it requires 4 registers to define (addr_ramp_down, three reg for phrst|stdysel|mode|outsel)
         each page can only have 31 registers ($0 reserved for the literal 0), each pulse needs 6 reg, so each page has a spare reg $31
@@ -327,9 +334,10 @@ class Compiler():
         """
         Load program.json to a dict
         """
-        directory_path = FPGA_AWG.program_dir_path
+        #directory_path = FPGA_AWG.program_dir_path
+        directory_path = "./program_cfg"
         file_path = os.path.join(directory_path, prog_name + '.json').replace('\\', '/')
-        with open(file_path, 'rb' as file):
+        with open(file_path, 'rb') as file:
             prog_cfg = json.load(file)
         return prog_cfg    # a list of numbers
 
@@ -339,9 +347,10 @@ class Compiler():
         """
         Load env data from disk to a list
         """
-        directory_path = FPGA_AWG.envelope_dir_path
+        #directory_path = FPGA_AWG.envelope_dir_path
+        directory_path = "./envelope_data"
         file_path = os.path.join(directory_path, env_name + '.json').replace('\\', '/')
-        with open(file_path, 'rb' as file):
+        with open(file_path, 'rb') as file:
             envelope = json.load(file)
         return envelope    # a list of numbers
 
@@ -350,12 +359,65 @@ class Compiler():
         """
         read pulse.json and load it into a dictionary
         """
-        directory_path = FPGA_AWG.waveform_dir_path
+        #directory_path = FPGA_AWG.waveform_dir_path
+        directory_path = "./waveform_cfg"
         file_path = os.path.join(directory_path, pulse_name + '.json').replace('\\', '/')
-        with open(file_path, 'rb' as file):
+        with open(file_path, 'rb') as file:
             pulse_cfg = json.load(file)
         return pulse_cfg
 
+    
+    def _get_mode_code(self, length, mode=None, outsel=None, stdysel=None, phrst=None):
+        """Creates mode code for the mode register in the set command, by setting flags and adding the pulse length.
+
+        Parameters
+        ----------
+        length : int
+            The number of DAC fabric cycles in the pulse
+        mode : str
+            Selects whether the output is "oneshot" or "periodic". The default is "oneshot".
+        outsel : str
+            Selects the output source. The output is complex. Tables define envelopes for I and Q.
+            The default is "product".
+
+            * If "product", the output is the product of table and DDS. 
+
+            * If "dds", the output is the DDS only. 
+
+            * If "input", the output is from the table for the real part, and zeros for the imaginary part. 
+            
+            * If "zero", the output is always zero.
+
+        stdysel : str
+            Selects what value is output continuously by the signal generator after the generation of a pulse.
+            The default is "zero".
+
+            * If "last", it is the last calculated sample of the pulse.
+
+            * If "zero", it is a zero value.
+
+        phrst : int
+            If 1, it resets the phase coherent accumulator. The default is 0.
+
+        Returns
+        -------
+        int
+            Compiled mode code in binary
+
+        """
+        if mode is None: mode = "oneshot"
+        if outsel is None: outsel = "product"
+        if stdysel is None: stdysel = "zero"
+        if phrst is None: phrst = 0
+        if length >= 2**16 or length < 3:
+            raise RuntimeError("Pulse length of %d is out of range (exceeds 16 bits, or less than 3) - use multiple pulses, or zero-pad the waveform" % (length))
+        stdysel_reg = {"last": 0, "zero": 1}[stdysel]
+        mode_reg = {"oneshot": 0, "periodic": 1}[mode]
+        outsel_reg = {"product": 0, "dds": 1, "input": 2, "zero": 3}[outsel]
+        mc = phrst*0b10000+stdysel_reg*0b01000+mode_reg*0b00100+outsel_reg
+        return mc << 16 | int(np.uint16(length))
+    
+    
 
 class Scheduler():
     """
@@ -420,8 +482,7 @@ class Scheduler():
                     self.curr_times[ch] += int(token)
                 else:    # if it's a pulse name
                     q.put((self.curr_times[ch], (ch, token)))
-                    break
-        
+                    break        
         while True:
             # get the earliest pulse (q.get() returns (prio, item))
             (ch, pulse_name) = q.get()[1]
@@ -429,8 +490,7 @@ class Scheduler():
             yield [ch, self.curr_times[ch], pulse_name]
             # update new pulse start time
             self.curr_times[ch] += self.compiler.pulse_length_LUT[pulse_name]
-            if q.empty():
-                break
+            
 
             # on the current channel enqueue the first token that's not a wait time, which is a pulse name
             for token in self.gen_dict[ch]:                
@@ -439,7 +499,10 @@ class Scheduler():
                 else:    # if it's a pulse name
                     q.put((self.curr_times[ch], (ch, token)))
                     break
+            if q.empty():
+                break
 
+                    
     def next_token(self, line_token_lst): 
         """
         Helper function to convert a token list to a generator
@@ -460,12 +523,12 @@ class Scheduler():
                 # make generator step next to get loop_count
                 loop_count = int(next(tokens))
                 # loop body should be a string rep of list
-                loop_body_tokens = self.compiler.tokenize(next(next_token_gen))
+                loop_body_tokens = self.compiler.tokenize(next(tokens))
                 # use yield instead of return so that for loop can be continued
                 for _ in range(loop_count):
                     yield from self.next_pulse(loop_body_tokens)
             else:
                 # handle pulse 
-                yield token
+                yield t
 
         
