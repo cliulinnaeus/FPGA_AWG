@@ -1,9 +1,10 @@
 from qick import *
-# from FPGA_AWG import waveform_dir_path, envelope_dir_path, program_dir_path
 from FPGA_AWG import *
 import json
 from queue import PriorityQueue
 import numpy as np
+import csv
+
 
 class Compiler():
 
@@ -194,7 +195,6 @@ class Compiler():
             for ch, nqz in nqz_dict.items():
                 ch_number = ch[-1]
                 self.awg_prog.declare_gen(ch=ch_number, nqz=nqz)
-
         
         # create a set of pulse names across all channels for allocating pulse param registers
         token_set = set()
@@ -303,7 +303,6 @@ class Compiler():
             p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length = {mc % 2**16} ')
         elif style == 'arb':
             # this block of codes below performs a shitty trick - saves the memory on addr of 
-            # each ch 
 
             # add evelope to all channels that uses this pulse
             # for a single pulse on different ch, every ch has a different addr
@@ -354,14 +353,20 @@ class Compiler():
 
     def load_envelope_data(self, env_name):
         """
-        Load env data from disk to a list
+        Load env data (.csv) to a python list
         """
         #directory_path = FPGA_AWG.envelope_dir_path
         directory_path = "./envelope_data"
-        file_path = os.path.join(directory_path, env_name + '.json').replace('\\', '/')
-        with open(file_path, 'rb') as file:
-            envelope = json.load(file)
-        return envelope    # a list of numbers
+        file_path = os.path.join(directory_path, env_name + '.csv').replace('\\', '/')
+        envelope = []
+        # Open the CSV file in read mode
+        with open(file_path, mode='r') as file:
+            reader = csv.reader(file)            
+            # Read each row and append the number to the list
+            for row in reader:
+                # Convert the number from string to int (or float, if needed)
+                envelope.append(int(row[0]))
+        return envelope
 
 
     def load_pulses_cfg(self, pulse_name):

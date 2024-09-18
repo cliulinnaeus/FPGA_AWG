@@ -387,19 +387,28 @@ class FPGA_AWG(Server):
 
         # compile program and save asm into self.awg_prog
         # whenever a new program is uploaded, self.awg_prog should be reinit
-        print("1")
-        self.compiler.compile(prog_name)
-        print("2")
+
+        try:
+            self.compiler.compile(prog_name)
+        except Exception as e:
+            msg = f"Compilation Error: {e}"
+            self.set_state("listening")
+            self._send_server_ack(conn, msg)
+            return
+
         print(self.awg_prog.asm())
 
-        self.awg_prog.config_all(self.soc)               # soc loads all parameters into registers and waveform data into PL memory
-        print("3")
-        self.soc.start_src(self.trig_mode)               # reset the trigger mode
-        print("4")
-        self.soc.start_tproc()                           # starts the tproc to run AWGProgram. Pulse will fire when trigger comes in "external" mode
-                                                         # or will fire immediately in "internal" mode
-        print("5")
-        msg = f"Program {prog_name} has started..."
+        try:
+            self.awg_prog.config_all(self.soc)               # soc loads all parameters into registers and waveform data into PL memory
+            self.soc.start_src(self.trig_mode)               # reset the trigger mode
+            self.soc.start_tproc()                           # starts the tproc to run AWGProgram. Pulse will fire when trigger comes in "external" mode
+        except Exception as e:
+            msg = f"Runtime Error: {e}"
+            self.set_state("listening")
+            self._send_server_ack(conn, msg)
+            return
+            
+        msg = f"Program [{prog_name}] has started..."
         self._send_server_ack(conn, msg)
 
 
@@ -419,6 +428,7 @@ class FPGA_AWG(Server):
         # self.soc.stop_tproc()
         # reset awg program
         self.awg_prog = AWGProgram(self.soccfg, self.soc)
+        self.compiler = Compiler(self.awg_prog)
         self.set_state("listening")
         msg = f"Program is stopped. Server resumes listening..."
         self._send_server_ack(conn, msg)
