@@ -80,12 +80,11 @@ class FPGA_AWG_client(Client):
     def start_program(self, name):
         self.send_string("START_PROGRAM")
         self.send_string(name)
+        self.receive_server_ack()
 
     def stop_program(self):
         self.send_string("STOP_PROGRAM")
-
-    def check_state(self):
-        self.send_string("CHECK_STATE")
+        self.receive_server_ack()
 
         
         
