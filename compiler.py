@@ -245,7 +245,8 @@ class Compiler():
 
         p.safe_regwi(pulse_page_ptr, time_reg, start_time, comment=f'time = {start_time}')       
         
-        p.set(ch, pulse_page_ptr, freq_reg, phase_reg, addr_reg, gain_reg, mc_reg, time_reg)
+        ch_number = ch[-1]
+        p.set(ch_number, pulse_page_ptr, freq_reg, phase_reg, addr_reg, gain_reg, mc_reg, time_reg)
 
 
     def alloc_registers(self, pulse_cfg):
@@ -368,6 +369,7 @@ class Compiler():
 
     
     def _get_mode_code(self, length, mode=None, outsel=None, stdysel=None, phrst=None):
+        # copied from Qick
         """Creates mode code for the mode register in the set command, by setting flags and adding the pulse length.
 
         Parameters
