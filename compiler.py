@@ -194,7 +194,7 @@ class Compiler():
             # declare the nyquist zone that each channel will output mostly in
             for ch, nqz in nqz_dict.items():
                 ch_number = ch[-1]
-                self.awg_prog.declare_gen(ch=ch_number, nqz=nqz)
+                self.awg_prog.declare_gen(ch=ch_number, nqz=int(nqz))
         
         # create a set of pulse names across all channels for allocating pulse param registers
         token_set = set()
@@ -312,7 +312,10 @@ class Compiler():
                 p.add_envelope(ch=ch, name=pulse_name, idata=i_data, qdata=q_data)
                 # each channel has a diff memory block, if I want to play same pulse on diff ch,
                 # I need to save diff addr on each
-            addr = p.envelopes[0]['envs'][pulse_name]["addr"]
+            
+            # depends on the version of Qick, this line may need to be changed to 
+            # addr = p.envelopes[0]['envs'][pulse_name]["addr"]
+            addr = p.envelopes[0][pulse_name]["addr"]
             # write the correct addr to register
             p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 2, addr, comment=f"pulse {pulse_name} mem addr = {addr}")
             
@@ -439,7 +442,7 @@ class Scheduler():
     contains a list of channels
     each channel has a time property 
     needs to compile pulses across multiple channels into a single line
-    channel.time is the time at which the next pulse is played immediately
+    channel. time is the time at which the next pulse is played immediately
 
     need to sort all events based on their start time across diff channels
     """
@@ -485,7 +488,6 @@ class Scheduler():
 
         # played at the same time
         q = PriorityQueue()
-
         # first, save first pulse from all channels into the queue, advance each timer accordingly
         for ch, next_pulse_gen in self.gen_dict.items():
             # enqueue the first token that's not a wait time, which is a pulse name
@@ -501,8 +503,7 @@ class Scheduler():
             # yield channel, start time, pulse name
             yield [ch, self.curr_times[ch], pulse_name]
             # update new pulse start time
-            self.curr_times[ch] += self.compiler.pulse_length_LUT[pulse_name]
-            
+            self.curr_times[ch] += self.compiler.pulse_length_LUT[pulse_name]            
 
             # on the current channel enqueue the first token that's not a wait time, which is a pulse name
             for token in self.gen_dict[ch]:                

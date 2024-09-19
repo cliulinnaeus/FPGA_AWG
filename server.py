@@ -64,7 +64,7 @@ class Server():
             return None
       
       
-    def receive_file(self, conn, dir_path, name=None):
+    def receive_file(self, conn, dir_path, name=None, file_type=".json"):
         """
         Returns filename received
         """
@@ -82,7 +82,7 @@ class Server():
 
             filename = os.path.basename(filename)  # Convert abs path to just the file name
             if name != None:
-                dir_path = os.path.join(dir_path, name + '.json').replace('\\', '/')
+                dir_path = os.path.join(dir_path, name + file_type).replace('\\', '/')
             else:
                 # Ensure the directory path ends with a separator
                 dir_path = os.path.join(dir_path, filename).replace('\\', '/')
@@ -104,6 +104,25 @@ class Server():
             except:
                 pass
             return None  
+
+
+    def empty_recv_buffer(self, conn):
+        """
+        Used to empty socket buffer when there's an error
+        """
+        try:
+            conn.settimeout(0.1)
+            while True:
+                data = sock.recv(4096)
+                if not data:
+                    break
+        except socket.timeout:
+            pass
+        except Exception as e:
+            print(f"Error: {e}")
+        finally:
+            conn.settimeout(None)
+
 
 
     def _utf8len(self, s):
