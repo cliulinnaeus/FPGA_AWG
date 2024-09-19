@@ -59,7 +59,7 @@ class FPGA_AWG(Server):
         file_lst = []
         if os.path.exists(dir_path):
             for filename in os.listdir(dir_path):
-                if filename.endswith('.json'):  # Check if the file is a .json file
+                if filename.endswith('.json') or filename.endswith('.csv'):  # Check if the file is a .json or .csv file
                     file_lst.append(os.path.splitext(filename)[0])
         return file_lst
 
@@ -199,7 +199,7 @@ class FPGA_AWG(Server):
         self._send_server_ack(conn, msg)
     
     def get_envelope_lst(self, conn):
-        msg = f"Current program list: {self.envelope_lst.__repr__()}"
+        msg = f"Current envelope list: {self.envelope_lst.__repr__()}"
         self._send_server_ack(conn, msg)
 
     def get_program_lst(self, conn):
@@ -239,7 +239,7 @@ class FPGA_AWG(Server):
             return 
 
         name = self.receive_string(conn)
-        filename = self.receive_file(conn, FPGA_AWG.envelope_dir_path, name=name)
+        filename = self.receive_file(conn, FPGA_AWG.envelope_dir_path, name=name, file_type=".csv")
 
         if name not in self.envelope_lst:
             self.envelope_lst.append(name) 
@@ -251,6 +251,8 @@ class FPGA_AWG(Server):
     def upload_program(self, conn):
         if self.state != "listening":
             msg = f"Can't receive file: current AWG state is {self.state}."
+            # TODO: need to empty recv buffer here 
+            self.empty_recv_buffer(conn)
             self._send_server_ack(conn, msg)
             return
         
@@ -297,7 +299,7 @@ class FPGA_AWG(Server):
             self._send_server_ack(conn, msg)
         else:
             try:
-                path = os.path.join(FPGA_AWG.envelope_dir_path, name + ".json").replace('\\', '/')  # Ensure the path uses forward slashes
+                path = os.path.join(FPGA_AWG.envelope_dir_path, name + ".csv").replace('\\', '/')  # Ensure the path uses forward slashes
                 os.remove(path)
                 self.envelope_lst.remove(name)
                 msg = f"{name} is deleted successfully."
@@ -407,7 +409,7 @@ class FPGA_AWG(Server):
             self.set_state("listening")
             self._send_server_ack(conn, msg)
             return
-            
+
         msg = f"Program [{prog_name}] has started..."
         self._send_server_ack(conn, msg)
 
