@@ -31,8 +31,6 @@ class Compiler():
 
     """
 
-
-
     # the ZERO reg of each page indicate number 0 and should not be used
     # table to indicate which register on which page is used
     NUM_REG = 32    # number of registers per page
@@ -273,7 +271,7 @@ class Compiler():
         mode = pulse_cfg.get("mode")
         outsel = pulse_cfg.get("outsel")
         stdysel = pulse_cfg.get("stdysel")
-        length = pulse_cfg["length"]
+        length = pulse_cfg["length"]        # length in number of clock cycles (2.6ns)
         i_data_name = pulse_cfg.get("i_data_name")
         q_data_name = pulse_cfg.get("q_data_name")
         if i_data_name is not None:
@@ -286,7 +284,6 @@ class Compiler():
             env_length = len(q_data) // self.samps_per_clk
         else:
             q_data = None
-
 
         # load all params to registers
         # safe_regwi make sure successful write if a number is more than 30 bits (see qick.asm_v1)
@@ -302,29 +299,40 @@ class Compiler():
             mc = self._get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel="dds", length=length)
             p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length = {mc % 2**16} ')
         elif style == 'arb':
-            # this block of codes below performs a shitty trick - saves the memory on addr of 
-
             # add evelope to all channels that uses this pulse
             # for a single pulse on different ch, every ch has a different addr
             for ch in range(Compiler.NUM_CHANNELS):
                 # add_envelope will round data elements to integers
                 # this line calculates the memory addr for each ch
                 p.add_envelope(ch=ch, name=pulse_name, idata=i_data, qdata=q_data)
-                # each channel has a diff memory block, if I want to play same pulse on diff ch,
-                # I need to save diff addr on each
-            
-            # depends on the version of Qick, this line may need to be changed to 
+                                               
             # addr = p.envelopes[0]['envs'][pulse_name]["addr"]
             addr = p.envelopes[0][pulse_name]["addr"]
+            print(f"this is the addr: {addr}")
             # write the correct addr to register
             p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 2, addr, comment=f"pulse {pulse_name} mem addr = {addr}")
-            
+    
             # make the mode code
             mc = self._get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel=outsel, length=env_length)
             p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length = {mc % 2**16} ')
+
+        # add flat envelope to allow pulse length not equal to a multiple of one clk cycle (2.6ns)
+        elif style == 'buffer':
+            # 
+            pass 
             
-#         elif style == 'buffer':
-#            pass
+            
+            
+            
+            
+
+
+
+        """
+        smallest pulse length is 3 clk cycles (48 envelope points), number of points / 16 must be the number of clk cycles
+        """
+
+
 
         """I decide to not include flat_top as it requires 4 registers to define (addr_ramp_down, three reg for phrst|stdysel|mode|outsel)
         each page can only have 31 registers ($0 reserved for the literal 0), each pulse needs 6 reg, so each page has a spare reg $31
@@ -456,7 +464,6 @@ class Scheduler():
         # dict to keep track of current pulse start time at each channel
         # key: ch, value: start time of next pulse 
         self.curr_times = {}
-        # init curr_time dict. use in ir instead of ir.keys() because it's faster
         for ch in self.tokens_dict:
             self.curr_times[ch] = 0
         # dict that stores one generator for each channel
@@ -472,9 +479,6 @@ class Scheduler():
         time it is played, and the channel it is played on
         this should update all channel timers 
         returns the one with the smallest timer value
-
-        tokens_dict: is a dict of token list corresponding to each diff channels
-            key: ch, value: token list
         
         loop:
         calls next_pulse on each channel and save them to priority queue
@@ -485,10 +489,7 @@ class Scheduler():
         yields (ch, start_time, next_pulse_name)
         
         """
-
-        # played at the same time
         q = PriorityQueue()
-        # first, save first pulse from all channels into the queue, advance each timer accordingly
         for ch, next_pulse_gen in self.gen_dict.items():
             # enqueue the first token that's not a wait time, which is a pulse name
             for token in next_pulse_gen:                

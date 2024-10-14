@@ -57,7 +57,6 @@ class Server():
                 if not data:
                     return None
                 buf += data
-
             return buf.decode()
         except Exception as e:
             print(f"Error receiving string: {e}")
