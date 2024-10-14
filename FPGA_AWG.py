@@ -150,11 +150,20 @@ class FPGA_AWG(Server):
                         elif command == "DELETE_WAVEFORM_CFG":
                             self.delete_waveform_config(conn)
 
+                        elif command == "DELETE_ALL_WAVEFORM_CFG":
+                            self.delete_all_waveform_config(conn)
+                            
                         elif command == "DELETE_ENVELOPE_DATA":
                             self.delete_envelope_data(conn)
 
+                        elif command == "DELETE_ALL_ENVELOPE_DATA":
+                            self.delete_all_envelope_data(conn)
+
                         elif command == "DELETE_PROGRAM":
                             self.delete_program(conn)
+
+                        elif command == "DELETE_ALL_PROGRAMS":
+                            self.delete_all_programs(conn)
 
                         elif command == "SET_TRIGGER_MODE":
                             self.set_trigger_mode(conn)
@@ -177,7 +186,7 @@ class FPGA_AWG(Server):
                         elif command == "GET_STATE":
                             self.get_state(conn)
 
-                        else: 
+                        else:
                             msg = f"Unknown command: {command}"
                             self._send_server_ack(conn, msg)
 
@@ -276,15 +285,24 @@ class FPGA_AWG(Server):
             msg = f"{name} is not found in waveform list."
             self._send_server_ack(conn, msg)
         else:
-            try:
-                path = os.path.join(FPGA_AWG.waveform_dir_path, name + ".json").replace('\\', '/')  # Ensure the path uses forward slashes
-                os.remove(path)
-                self.waveform_lst.remove(name)
-                msg = f"{name} is deleted successfully."
-                self._send_server_ack(conn, msg)
-            except Exception as e:
-                msg = f"Error: {e}"
-                self._send_server_ack(conn, msg)               
+            self._delete_helper(conn, FPGA_AWG.waveform_dir_path, name)           
+
+
+    def delete_all_waveform_config(self, conn):
+        if self.state != "listening":
+            msg = f"Can't receive file: current AWG state is {self.state}."
+            self._send_server_ack(conn, msg)
+            return
+
+        lst = self.waveform_lst[:]
+        try:
+            for name in lst:
+                self._delete_all_helper(conn, FPGA_AWG.waveform_dir_path, name)           
+            msg = f"All waveforms are deleted successfully."
+            self._send_server_ack(conn, msg)
+        except Exception as e:
+            msg = f"Error: {e}"
+            self._send_server_ack(conn, msg)  
 
 
     def delete_envelope_data(self, conn):
@@ -298,15 +316,24 @@ class FPGA_AWG(Server):
             msg = f"{name} is not found in envelope list."
             self._send_server_ack(conn, msg)
         else:
-            try:
-                path = os.path.join(FPGA_AWG.envelope_dir_path, name + ".csv").replace('\\', '/')  # Ensure the path uses forward slashes
-                os.remove(path)
-                self.envelope_lst.remove(name)
-                msg = f"{name} is deleted successfully."
-                self._send_server_ack(conn, msg)
-            except Exception as e:
-                msg = f"Error: {e}"
-                self._send_server_ack(conn, msg)
+            self._delete_helper(conn, FPGA_AWG.envelope_dir_path, name)
+
+
+    def delete_all_envelope_data(self, conn):
+        if self.state != "listening":
+            msg = f"Can't delete file: current AWG state is {self.state}."
+            self._send_server_ack(conn, msg)
+            return 
+        
+        lst = self.envelope_lst[:]
+        try:
+            for name in lst:
+                self._delete_all_helper(conn, FPGA_AWG.envelope_dir_path, name) 
+            msg = f"All envelope data are deleted successfully."
+            self._send_server_ack(conn, msg)
+        except Exception as e:
+            msg = f"Error: {e}"
+            self._send_server_ack(conn, msg)           
     
     
     def delete_program(self, conn):
@@ -320,17 +347,67 @@ class FPGA_AWG(Server):
             msg = f"{name} is not found in program list."
             self._send_server_ack(conn, msg)
         else:
-            try:
-                path = os.path.join(FPGA_AWG.program_dir_path, name + ".json").replace('\\', '/')  # Ensure the path uses forward slashes
-                os.remove(path)
-                self.program_lst.remove(name)
-                msg = f"{name} is deleted successfully."
-                self._send_server_ack(conn, msg)
-            except Exception as e:
-                msg = f"Error: {e}"
-                self._send_server_ack(conn, msg)
+            self._delete_helper(conn, FPGA_AWG.program_dir_path, name)
+         
     
+    def delete_all_programs(self, conn):
+         if self.state != "listening":
+            msg = f"Can't delete file: current AWG state is {self.state}."
+            self._send_server_ack(conn, msg)
+            return
+        
+         lst = self.program_lst[:]
+         try:
+            for name in lst:
+                self._delete_all_helper(conn, FPGA_AWG.program_dir_path, name)
+            msg = f"All programs are deleted successfully."
+            self._send_server_ack(conn, msg)
+         except Exception as e:
+            msg = f"Error: {e}"
+            self._send_server_ack(conn, msg)
+        
+    def _delete_helper(self, conn, root_dir, name):
+        try:
+            file_type = ".json"
+            if root_dir == FPGA_AWG.program_dir_path:
+                target_lst = self.program_lst
+                    
+            elif root_dir ==  FPGA_AWG.envelope_dir_path:
+                target_lst = self.envelope_lst
+                file_type = ".csv"
+                    
+            elif root_dir == FPGA_AWG.waveform_dir_path:
+                target_lst = self.waveform_lst
+   
+            path = os.path.join(root_dir, name + file_type).replace('\\', '/')  # Ensure the path uses forward slashes
+            os.remove(path)
+            
+            target_lst.remove(name)
+            msg = f"{name} is deleted successfully."
+            self._send_server_ack(conn, msg)
+        except Exception as e:
+            msg = f"Error: {e}"
+            self._send_server_ack(conn, msg)
+                     
 
+    def _delete_all_helper(self, conn, root_dir, name):
+            file_type = ".json"
+            if root_dir == FPGA_AWG.program_dir_path:
+                target_lst = self.program_lst
+                    
+            elif root_dir ==  FPGA_AWG.envelope_dir_path:
+                target_lst = self.envelope_lst
+                file_type = ".csv"
+                    
+            elif root_dir == FPGA_AWG.waveform_dir_path:
+                target_lst = self.waveform_lst
+   
+            path = os.path.join(root_dir, name + file_type).replace('\\', '/')  # Ensure the path uses forward slashes
+            os.remove(path)
+            
+            target_lst.remove(name)
+            
+            
     def set_trigger_mode(self, conn):
         if self.state != "listening":
             msg = f"Can't set trigger: current AWG state is {self.state}."
