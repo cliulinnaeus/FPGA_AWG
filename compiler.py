@@ -33,7 +33,7 @@ class Compiler():
 
     # the ZERO reg of each page indicate number 0 and should not be used
     # table to indicate which register on which page is used
-    NUM_REG = 32    # number of registers per page
+    NUM_REG = 31    # number of registers per page, excluding $0 for storing value 0
     NUM_PAGE = 8    # page 0 is reserved for loop counter
     REG_PTR_STEP = 6    # reg pointer increment step size, i.e. number of registers for each pulse
                         # there are 6 regs per pulse, here the time reg is excluded 
@@ -162,7 +162,7 @@ class Compiler():
         if next 6 registers exceeds the number of registers per page, 
         increment page pointer
         """
-        if self._curr_reg_ptr + Compiler.REG_PTR_STEP > Compiler.NUM_REG:
+        if self._curr_reg_ptr + Compiler.REG_PTR_STEP >= Compiler.NUM_REG:
             self._curr_reg_ptr = 1
             self._step_page_ptr()
         else:
@@ -262,7 +262,7 @@ class Compiler():
         addr of every ch (all channels 0-7), it does not populate the t register 
         """
         p = self.awg_prog
-        pulse_name = pulse_cfg["pulse_name"]
+        pulse_name = pulse_cfg["name"]
         style = pulse_cfg["style"]
         freq = p.freq2reg(f=pulse_cfg["freq"])
         phase = p.deg2reg(deg=pulse_cfg["phase"])
