@@ -456,6 +456,12 @@ class FPGA_AWG(Server):
         """
         
         prog_name = self.receive_string(conn)
+        if self.state != "listening":
+            msg = f"Can't start program: current AWG state is {self.state}."
+            self._send_server_ack(conn, msg)
+            return
+        
+
         if prog_name not in self.program_lst:
             msg = f"Program {prog_name} is not found in program list."
             self._send_server_ack(conn, msg)
