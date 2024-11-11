@@ -28,12 +28,46 @@ ssh xilinx@192.168.0.123
 ```
 the password is _xilinx_ 
 
-run the following in your shell program
+Now type 
 ```
-cd ~
+ls jupyter_notebooks
+```
+and you should see a repository called _qick_ being listed. cd into this repository
+```
+cd jupyter_notebooks/qick
+```
+Evoke root access (the QICK library can only be ran under root access, which means it has to be installed under root)
+```
+su
+```
+enter password _xilinx_. You should now see the new line should initiate with _root@pynq:_
+
+run the installation program
+```
+pip3 install -e .
+```
+At this point the QICK library should already be installed. Check if you have correctly installed QICK by opening an interactive python session:
+```
+python3 -i
+```
+```
+import qick
+print(qick.__version__)
+```
+A correct installation will tell you the version, e.g. _'0.2.191'_
+
+Now let's install the QICK_AWG repo.
+First exit out of the interactive python session and run the following in your shell
+```
+cd /home/xilinx
 git clone https://github.com/cliulinnaeus/FPGA_AWG.git
-cd ./FPGA_AWG
+cd FPGA_AWG
 ```
+You are now ready to go! 
+
+
+## Tutorial
+
 
 
 
