@@ -22,8 +22,18 @@ For QICK version, it is required to use an older version (0.2.191 works), as QIC
 ### Installation instructions
 Follow the quick start guide in QICK repository but do not run the installation jupyter notebook _000_Install_qick_package.ipynb_ in _qick_demos_: [QICK qick start guide](https://github.com/openquantumhardware/qick/tree/main/quick_start)
 
+Use your favorite shell program (I typically use GitBash), ssh into the FPGA address, e.g.
+```
+ssh xilinx@192.168.0.123
+```
+the password is _xilinx_ 
 
-
+run the following in your shell program
+```
+cd ~
+git clone https://github.com/cliulinnaeus/FPGA_AWG.git
+cd ./FPGA_AWG
+```
 
 
 
