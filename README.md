@@ -12,10 +12,12 @@ Note:
 See the original QICK repository at: https://github.com/openquantumhardware/qick
 
 ## Installation
-Follow the quick start guide in QICK repository but do not run the installation jupyter notebook 000_Install_qick_package.ipynb in qick_demos: [QICK qick start guide](https://github.com/openquantumhardware/qick/tree/main/quick_start)
 
 For pynq disk image, it is recommended to use v2.6 (this code based has only been tested on v2.6)
 For QICK version, it is required to use an older version (0.2.191 works), as QICK-AWG will not work on the newest version in the QICK repo. You can find an older (and working) version of QICK [here](https://github.com/yao-lab-harvard/qick). 
+
+Follow the quick start guide in QICK repository but do not run the installation jupyter notebook 000_Install_qick_package.ipynb in qick_demos: [QICK qick start guide](https://github.com/openquantumhardware/qick/tree/main/quick_start)
+
 
 
 
