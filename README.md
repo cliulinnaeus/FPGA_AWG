@@ -1,11 +1,21 @@
-(More documentations will be added)
-Code for running an arbitrary waveform generator on the Xilinx ZCU111 FPGA based on Qick (https://github.com/openquantumhardware/qick)
+# QICK-AWG: Flexible Arbitrary Waveform Generation for Experimental Setups
+### (More documentations will be added)
+QICK-AWG is a specialized software package that transforms a QICK-based FPGA into an Arbitrary Waveform Generator (AWG) designed to integrate seamlessly into diverse experimental setups. Many labs already equipped with experiment control hardware and software face challenges integrating QICK without substantial modifications, as QICK is a self-contained and specialized library. QICK-AWG bridges this gap by enabling QICK-based FPGA boards to function solely as AWGs, concentrating on generating customizable pulse sequences for flexible waveform generation. This program is suitable for doing complex dynamical decoupling sequences in atomic, molecular, optical (AMO) experiments such as the NV-centers. 
 
-In many labs with already built experiment control hardware and software, it is nontrivial to directly integrate a Qick-based FPGA into this network as Qick is a very self-contained library. To do so requires a programming interface from the Qick to the external control software. 
+Built on top of the QICK library, this codebase provides a straightforward programming interface. When deployed, the FPGA operates as an AWG, actively listening for and responding to user commands through a network socket. Note that this initial version does not yet support in situ pulse parameter sweep, which is a planned update in future versions.
 
-This code base is built on top of Qick and serves as programming interface to the Qick library. When the code is ran on the FPGA, the FPGA behaves like a server that actively listens to commands sent by the user via a network socket. The FPGA behaves like an arbitrary waveform generator (AWG) sitting at the other end of the network socket. It does not (yet) have the ability to perform measurements but is merely a programmable AWG. 
+Note: 
+- This software has only been tested on ZCU111. One may run into unexpected bugs on other QICK boards (ZCU216, RFSoC4x2)
+- This software does not yet support in situ pulse parameter sweeps, which can be used to realize adiabatic passage sequences. This is a planned update in future versions.
+- This software is still yet a work in progress. Please report any bugs to me. 
 
-The compiler is also rewritten. The users can now define a pulse sequence more straightforwardly (to be shown below). The compiler now generates Qick assembly v1 code differently from before to reduce the number of register writes during the firing of pulses. 
+See the original QICK repository at: https://github.com/openquantumhardware/qick
+
+## Installation
+Follow the quick start guide in QICK repository but do not run the installation jupyter notebook 000_Install_qick_package.ipynb in qick_demos: [QICK qick start guide](https://github.com/openquantumhardware/qick/tree/main/quick_start)
+
+For pynq disk image, it is recommended to use v2.6 (this code based has only been tested on v2.6)
+For QICK version, it is required to use an older version (0.2.191 works), as QICK-AWG will not work on the newest version in the QICK repo. You can find an older (and working) version of QICK [here](https://github.com/yao-lab-harvard/qick). 
 
 
 
