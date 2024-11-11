@@ -13,10 +13,14 @@ See the original QICK repository at: https://github.com/openquantumhardware/qick
 
 ## Installation
 
-For pynq disk image, it is recommended to use v2.6 (this code based has only been tested on v2.6)
-For QICK version, it is required to use an older version (0.2.191 works), as QICK-AWG will not work on the newest version in the QICK repo. You can find an older (and working) version of QICK [here](https://github.com/yao-lab-harvard/qick). 
+### Prerequisites
+It is assumed you start with a brand new ZCU111 board. If you have an old board with already installed newest version of QICK, you may want to consider downgrading it. 
 
-Follow the quick start guide in QICK repository but do not run the installation jupyter notebook 000_Install_qick_package.ipynb in qick_demos: [QICK qick start guide](https://github.com/openquantumhardware/qick/tree/main/quick_start)
+For PYNQ disk image, it is recommended to use v2.6 (this code based has only been tested on v2.6)
+For QICK version, it is required to use an older version (0.2.191 works), as QICK-AWG will not work on the newest version in the QICK repo. You can find an older (and working) version of QICK [here](https://github.com/yao-lab-harvard/qick). Clone this repository into your FPGA. 
+
+### Installation instructions
+Follow the quick start guide in QICK repository but do not run the installation jupyter notebook _000_Install_qick_package.ipynb_ in _qick_demos_: [QICK qick start guide](https://github.com/openquantumhardware/qick/tree/main/quick_start)
 
 
 
