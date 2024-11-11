@@ -391,6 +391,15 @@ class Compiler():
             pulse_cfg = json.load(file)
         return pulse_cfg
 
+
+    def reset(self):
+        self._curr_reg_ptr = 1
+        self._curr_page_ptr = 1
+        self.reg_LUT = {}
+        self.page_LUT = {}
+        self.pulse_length_LUT = {}
+        self.pulse_style_LUT = {}
+
     
     def _get_mode_code(self, length, mode=None, outsel=None, stdysel=None, phrst=None):
         # copied from Qick
