@@ -68,6 +68,12 @@ You are now ready to go!
 
 ## Tutorial
 
+### General Description
+To run the AWG program, run the following 
+```
+python3 test_FPGA_AWG.py
+```
+This initializes a server object on the FPGA and it actively listens to commands send to it.
 
 
 
