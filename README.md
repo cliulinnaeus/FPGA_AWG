@@ -69,7 +69,7 @@ You are now ready to go!
 ## Tutorial
 
 ### General Description
-To run the AWG program, run the following 
+To run the AWG program, run the following in the _FPGA_AWG_ directory
 ```
 python3 test_FPGA_AWG.py
 ```
