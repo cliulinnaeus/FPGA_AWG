@@ -19,7 +19,12 @@ It is assumed you start with a brand new ZCU111 board. If you have an old board 
 For PYNQ disk image, it is recommended to use v2.6 (this code based has only been tested on v2.6)
 For QICK version, it is required to use an older version (0.2.191 works), as QICK-AWG will not work on the newest version in the QICK repo. You can find an older (and working) version of QICK [here](https://github.com/yao-lab-harvard/qick). Clone this repository into your FPGA. 
 
+You also need a client computer to be connect to the same LAN of the FPGA. 
+
 ### Installation instructions
+This package needs to be downloaded on both the QICK board and the client computer. 
+
+#### Installation on the QICK board
 Follow the quick start guide in QICK repository but do not run the installation jupyter notebook _000_Install_qick_package.ipynb_ in _qick_demos_: [QICK qick start guide](https://github.com/openquantumhardware/qick/tree/main/quick_start)
 
 Use your favorite shell program (I typically use GitBash), ssh into the FPGA address, e.g.
@@ -64,6 +69,11 @@ git clone https://github.com/cliulinnaeus/FPGA_AWG.git
 cd FPGA_AWG
 ```
 You are now ready to go! 
+
+#### Installation on the client computer
+Simply git clone this repo to a good location. 
+
+
 
 
 ## Tutorial
