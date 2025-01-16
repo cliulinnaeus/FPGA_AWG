@@ -8,7 +8,7 @@ import json
 class FPGA_AWG(Server):
     
     host = '0.0.0.0'
-    port = 8080
+    port = 1234
     
     waveform_dir_path = "/home/xilinx/FPGA_AWG/waveform_cfg"
     envelope_dir_path = "/home/xilinx/FPGA_AWG/envelope_data" 
