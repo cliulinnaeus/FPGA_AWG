@@ -1,0 +1,9 @@
+{
+    "name": "X_periodic",
+    "style": "const",
+    "freq": 1780,
+    "gain": 32767,
+    "phase": 0,
+    "length": 10,
+    "mode": "periodic"
+}

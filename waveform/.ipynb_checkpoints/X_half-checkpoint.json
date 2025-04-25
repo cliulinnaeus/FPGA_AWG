@@ -1,0 +1,9 @@
+{
+    "pulse_name": "X_half",
+    "style": "const",
+    "freq": 3,
+    "gain": 30000,
+    "phase": 0,
+    "length": 100,
+    "mode": "oneshot"
+}

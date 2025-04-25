@@ -1,0 +1,9 @@
+{
+    "pulse_name": "Y",
+    "style": "const",
+    "freq": 3,
+    "gain": 30000,
+    "phase": 90,
+    "length": 200,
+    "mode": "oneshot"
+}

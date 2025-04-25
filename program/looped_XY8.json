@@ -1,0 +1,8 @@
+{
+    "prog_structure": 
+        
+        {
+        "ch6": "[X_half, 200, loop(5, [loop(2, [X, 400, Y, 400]), Y, 400, X, 400, Y, 400, n_X_half]), 200, X_half]",
+        "ch7": "[X_periodic]"
+        }
+}

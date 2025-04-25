@@ -1,0 +1,9 @@
+{
+ "name": "X1half",
+ "style": "const",
+ "freq": 500,
+ "gain": 30000,
+ "phase": 0,
+ "length": 100
+    
+}

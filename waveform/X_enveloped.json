@@ -1,0 +1,11 @@
+{
+    "pulse_name": "X_enveloped",
+    "style": "arb",
+    "freq": 2000,
+    "gain": 30000,
+    "phase": 0,
+    "length": 10,
+    "mode": "oneshot",
+    "i_data_name": "half_circle",
+    "q_data_name": "half_circle"
+}

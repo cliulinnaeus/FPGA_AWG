@@ -1,0 +1,10 @@
+{
+    "name": "X2half",
+    "style": "const",
+    "freq": 500,
+    "gain": 30000,
+    "phase": 180,
+    "length": 100
+    
+    
+}

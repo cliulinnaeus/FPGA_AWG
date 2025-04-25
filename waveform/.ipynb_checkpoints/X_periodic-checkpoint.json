@@ -1,0 +1,9 @@
+{
+    "pulse_name": "X_periodic",
+    "style": "const",
+    "freq": 500,
+    "gain": 30000,
+    "phase": 0,
+    "length": 10,
+    "mode": "periodic"
+}
