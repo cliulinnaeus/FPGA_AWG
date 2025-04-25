@@ -81,9 +81,84 @@ Simply git clone this repo to a good location.
 ### General Description
 To run the AWG program, run the following in the _FPGA_AWG_ directory
 ```
-python3 test_FPGA_AWG.py
+python3 run_server.py
 ```
 This initializes a server object on the FPGA and it actively listens to commands send to it.
 
 
+
+### How to define a waveform
+
+To program a pulse sequence, the first thing to do is to define all the necessary waveforms used in the pulse sequence. In a spin echo sequence, two distinct waveforms are used, an X-pi/2 pulse and an X-pi pulse. Therefore you need to define them. The waveform configuration files are defined in the .json format. Here is an example
+
+```
+{
+    "pulse_name": "X_enveloped",
+    "style": "arb",
+    "freq": 2000,
+    "gain": 30000,
+    "phase": 0,
+    "length": 10,
+    "mode": "oneshot",
+    "i_data_name": "half_circle",
+    "q_data_name": "half_circle"
+}
+```
+
+pulse_name: the name of the pulse that will be used to call the pulse in the program configuration file
+
+style: switch between "const" and "arb". For "const", the server directly generates sine waves using DDS output, the time resolution is limited to 2.6ns, which is one clock cycle. The shortest pulse length is limited to 3 clock cycles. There is no memory limitation in this style, any pulse sequence can be ran indefinitely. For "arb", the server multiples the DDS output with the memory (envelope data) and outputs the product. 
+
+freq: in units of MHz, can go from 0 to 6000. Importantly, the sampling frequency of the server is around 3000MHz, so above 3000MHz there will be aliasing due to Nyquist theory.
+
+gain: goes from -2^15 to 2^15-1. For negative numbers the absolute value is the same, but the phase is off by 180 deg. 
+
+phase: in units of degree
+
+length: in units of clock cycle (2.6ns), minimum is 3
+
+mode: "oneshot" or "periodic". In oneshot mode, the pulse sequence program will only be run once, in periodic mode, the last pulse in the pulse sequence will be ran indefinitely after the whole sequence is ran once. 
+
+i_data_name: the name of the .csv file for the envelope data
+
+q_data_name: the name of the .csv file for the envelope data
+
+""
+
+
+
+
+
+### How to write a program
+
+Program configuration files must written in the .json format. Each configuration file must include two necessary keys: "name" and "prog_structure". The name must match with the name you use in the client.upload_program_config() function. In the prog_structure field you can define the pulse sequence using the following syntax
+
+```
+"prog_structure":
+{
+"ch7": "[X, 10, X, 10, X, 10]",
+"ch6": "[Y]"
+} 
+```
+The body of "prog_structure" is also a dictionary, where the keys are the channel name (0 to 7), and the values are strings representing the pulse sequence. 
+1. The pulse sequence must be presented in lists
+2. You can call the name of waveforms you want the waveform generator to produce 
+3. If you want to wait between pulses, simply insert a number. This number is in units of numbers of clock cycles, i.e. 2.6ns
+
+You are also allowed to define looped arguments by the following syntax
+
+```
+"prog_structure":
+{
+"ch7": "[loop(3, [X, 10])]",
+"ch6": "[Y]"
+}
+```
+This program is exactly the same as the previous one. The loop function takes in two arguments, the first one is a loop count, and the second one is the pulse sequence to loop over, this pulse sequence is another list. The compiler also supports nested loops. 
+
+
+
+### Tutorial jupyter notebook
+
+You can play with _tutorial.ipynb_ to explore the various functionalities.  
 
