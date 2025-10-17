@@ -39,7 +39,6 @@ class Compiler():
                         # there are 6 regs per pulse, here the time reg is excluded 
                         # instead, the last reg of each page is used as the time reg for that channel
     PAGE_PTR_STEP = 1
-    NUM_CHANNELS = 7
 
 
     def __init__(self, awg_prog):
@@ -63,7 +62,19 @@ class Compiler():
         # pulse style look up table (const, arb, buffer). key: pulse name, value: style
         # this is used by the scheduler to determine whether the pulse needs to use special addr register
         self.pulse_style_LUT = {}
+        
+        self.board_name = self.awg_prog.soccfg['board']
+        if self.board_name == 'RFSoC4x2':
+            self.NUM_CHANNELS = 2
+        elif self.board_name == 'ZCU111':
+            self.NUM_CHANNELS = 7
 
+        # get tprocessor freq in MHz (sets pulse start time)
+        # RFSoC4x2: 409.6; ZCU111: 384
+        self.f_time = self.awg_prog.soccfg['tprocs'][0]['f_time']
+        # get generator freq in MHz
+        # RFSoC4x2: 614.4; ZCU111: 384
+        self.f_fabric = self.awg_prog.soccfg['gens'][0]['f_fabric']
 
 
     def tokenize(self, prog_line):
@@ -224,7 +235,8 @@ class Compiler():
 
         self.awg_prog.end()
 
-
+    def _ns2us(self, time_in_ns):
+        return time_in_ns / 1000
 
     def fire_pulse(self, ch, start_time, pulse_name):
         """
@@ -248,8 +260,9 @@ class Compiler():
         
         mc_reg = pulse_reg_ptr + 4
         time_reg = pulse_reg_ptr + 5
-
-        p.safe_regwi(pulse_page_ptr, time_reg, start_time, comment=f'time = {start_time}')       
+        
+        start_time_in_clkcycle = p.soccfg.us2cycles(self._ns2us(start_time))
+        p.safe_regwi(pulse_page_ptr, time_reg, start_time_in_clkcycle, comment=f'time = {start_time} ns')       
         
         ch_number = int(ch[-1])
         p.set(ch_number, pulse_page_ptr, freq_reg, phase_reg, addr_reg, gain_reg, mc_reg, time_reg)
@@ -271,7 +284,9 @@ class Compiler():
         mode = pulse_cfg.get("mode")
         outsel = pulse_cfg.get("outsel")
         stdysel = pulse_cfg.get("stdysel")
-        length = pulse_cfg["length"]        # length in number of clock cycles (2.6ns)
+        length_in_ns = pulse_cfg["length"]        # length in ns
+        # convert ns to number of clk cycles of generator frequency. hard coded to be ch0
+        length_in_clkcycle = p.soccfg.us2cycles(self._ns2us(length_in_ns), gen_ch=0)
         i_data_name = pulse_cfg.get("i_data_name")
         q_data_name = pulse_cfg.get("q_data_name")
         if i_data_name is not None:
@@ -296,12 +311,12 @@ class Compiler():
             # use addr 0 if style is const
             addr_reg = 0
             # make the mode code
-            mc = self._get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel="dds", length=length)
-            p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length = {mc % 2**16} ')
+            mc = self._get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel="dds", length=length_in_clkcycle)
+            p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length(cc) = {mc % 2**16} | length(ns) = {length_in_ns}')
         elif style == 'arb':
             # add evelope to all channels that uses this pulse
             # for a single pulse on different ch, every ch has a different addr
-            for ch in range(Compiler.NUM_CHANNELS):
+            for ch in range(self.NUM_CHANNELS):
                 # add_envelope will round data elements to integers
                 # this line calculates the memory addr for each ch
                 p.add_envelope(ch=ch, name=pulse_name, idata=i_data, qdata=q_data)
@@ -314,9 +329,9 @@ class Compiler():
     
             # make the mode code
             mc = self._get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel=outsel, length=env_length)
-            p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length = {mc % 2**16} ')
+            p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length(cc) = {mc % 2**16} ')
 
-        # add flat envelope to allow pulse length not equal to a multiple of one clk cycle (2.6ns)
+        # add flat envelope to allow pulse length not equal to a multiple of one clk cycle
         elif style == 'buffer':
             # 
             pass 
