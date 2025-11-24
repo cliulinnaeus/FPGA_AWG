@@ -240,6 +240,7 @@ class Compiler():
         r_count = self._curr_loop_reg_ptr   # count register
         self.loop_count_reg_LUT[id] = r_count # save the loop id and its associated register number
         self.awg_prog.safe_regwi(0, r_count, count - 1, comment=f'count = {count}') # load reg value
+        self.label(f"LOOP_{id}")
         # step loop reg pointer
         self._step_loop_reg_ptr()
 
