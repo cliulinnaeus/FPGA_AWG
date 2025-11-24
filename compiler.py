@@ -39,12 +39,14 @@ class Compiler():
                         # there are 6 regs per pulse, here the time reg is excluded 
                         # instead, the last reg of each page is used as the time reg for that channel
     PAGE_PTR_STEP = 1
+    LOOP_REG_PTR_STEP = 1    # loop count register pointer increment step size
 
 
     def __init__(self, awg_prog):
         self.awg_prog = awg_prog
         self._curr_reg_ptr = 1
         self._curr_page_ptr = 1
+        self._curr_loop_reg_ptr = 1    # loop count reg on page 0. idx 0 is hard wired to 0
         # assumes all channels of QickProgram are the same generator, pick 0th gen, get samps_per_clk
         # samps_per_clk is default 16
         self.samps_per_clk = self.awg_prog.soccfg['gens'][0]['samps_per_clk']
@@ -180,6 +182,17 @@ class Compiler():
             self._curr_reg_ptr  = self._curr_reg_ptr + Compiler.REG_PTR_STEP
 
 
+    def _step_loop_reg_ptr(self):
+        """
+        if next register exceeds the number of registers per page on page 0, 
+        increment page pointer
+        """
+        if self._curr_loop_reg_ptr + Compiler.LOOP_REG_PTR_STEP >= Compiler.NUM_REG:
+            raise RuntimeError(f"Compilation Error: No available loop registers left, reduce the number of loops")
+        else:
+            self._curr_loop_reg_ptr  = self._curr_loop_reg_ptr + Compiler.LOOP_REG_PTR_STEP
+
+
     def _step_page_ptr(self):
         """
         increment the page pointer, if overflow, raise error
@@ -230,8 +243,41 @@ class Compiler():
         scheduler = Scheduler(self, tokens_dict)
         scheduler_generator = scheduler.schedule_next()
         for fire_pulse_params in scheduler_generator:
-            [ch, start_time, pulse_name] = fire_pulse_params
-            self.fire_pulse(ch, start_time, pulse_name)
+            if fire_pulse_params["kind"] == "loop_start":
+                id = fire_pulse_params["id"]
+                self.awg_prog.label(f"LOOP_{id}")
+        
+            elif fire_pulse_params["kind"] == "loop_end":
+                id = fire_pulse_params["id"]
+                count = fire_pulse_params["count"]
+                r_count = self._curr_loop_reg_ptr
+                # store the loop count to register on page 0
+                self.safe_regwi(0, r_count, count, comment=f'loop count = {count}')
+                
+
+                self.awg_prog.loopnz(f"LOOP_{id}")
+
+
+        
+            elif fire_pulse_params["kind"] == "pulse":
+                ch, start_time, pulse_name = fire_pulse_params["ch"], fire_pulse_params["time"], fire_pulse_params["name"]
+                self.fire_pulse(ch, start_time, pulse_name)
+
+"""
+if ev["kind"] == "pulse":
+                yield {"kind": "pulse", "ch": ch, "time": ts, "name": ev["name"]}
+                self.curr_times[ch] = ts + self.compiler.pulse_length_LUT[ev["name"]]
+            elif ev["kind"] == "loop_start":
+                yield {"kind": "loop_start", "ch": ch, "time": ts,
+                   "id": ev["id"], "count": ev["count"]}
+            # loop_start does not change time
+            elif ev["kind"] == "loop_end":
+                yield {"kind": "loop_end", "ch": ch, "time": ts, "id": ev["id"]}
+"""
+
+
+            # [ch, start_time, pulse_name] = fire_pulse_params
+            # self.fire_pulse(ch, start_time, pulse_name)
 
         self.awg_prog.end()
 
@@ -515,7 +561,7 @@ class Scheduler():
         """
         q = PriorityQueue()
         def prime_channel(ch):
-            # enqueue the first event that's not a wait time, which is a pulse name
+            # enqueue the first event that's not a wait time, which is a pulse name or loop
             for ev in self.gen_dict[ch]:
                 if ev["kind"] == "wait":
                     self.curr_times[ch] += ev["value"]
@@ -538,7 +584,8 @@ class Scheduler():
                    "id": ev["id"], "count": ev["count"]}
             # loop_start does not change time
             elif ev["kind"] == "loop_end":
-                yield {"kind": "loop_end", "ch": ch, "time": ts, "id": ev["id"]}
+                yield {"kind": "loop_end", "ch": ch, "time": ts,
+                   "id": ev["id"], "count": ev["count"]}
             # loop_end does not change time
 
             prime_channel(ch)
@@ -575,7 +622,7 @@ class Scheduler():
                 loop_id = self._new_loop_id()
                 yield {"kind": "loop_start", "id": loop_id, "count": loop_count}
                 yield from self.next_pulse(loop_body_tokens, depth + 1)
-                yield {"kind": "loop_end", "id": loop_id, "depth": depth}
+                yield {"kind": "loop_end", "id": loop_id, "count": loop_count, "depth": depth}
             elif t.isnumeric():
                 yield {"kind": "wait", "value": int(t)}
             else:
