@@ -579,6 +579,8 @@ class Scheduler():
         for ch, tokens in self.tokens_dict.items():
             self.gen_dict[ch] = self.next_pulse(tokens)
 
+        self._loop_id = 0
+
     
     def schedule_next(self):
         """
