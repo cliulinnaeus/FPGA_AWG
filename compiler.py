@@ -65,6 +65,9 @@ class Compiler():
         # this is used by the scheduler to determine whether the pulse needs to use special addr register
         self.pulse_style_LUT = {}
         
+        # loop register look up table. key: loop id, value: register number on page 0
+        self.loop_count_reg_LUT = {}
+
         self.board_name = self.awg_prog.soccfg['board']
         if self.board_name == 'RFSoC4x2':
             self.NUM_CHANNELS = 2
@@ -176,8 +179,12 @@ class Compiler():
         increment page pointer
         """
         if self._curr_reg_ptr + Compiler.REG_PTR_STEP >= Compiler.NUM_REG:
-            self._curr_reg_ptr = 1
-            self._step_page_ptr()
+            # current page is full; advance if another page exists, otherwise stay so next alloc will guard/error
+            if self._curr_page_ptr + Compiler.PAGE_PTR_STEP > Compiler.NUM_PAGE:
+                self._curr_reg_ptr = Compiler.NUM_REG
+            else:
+                self._curr_reg_ptr = 1
+                self._step_page_ptr()
         else:
             self._curr_reg_ptr  = self._curr_reg_ptr + Compiler.REG_PTR_STEP
 
@@ -188,9 +195,10 @@ class Compiler():
         increment page pointer
         """
         if self._curr_loop_reg_ptr + Compiler.LOOP_REG_PTR_STEP >= Compiler.NUM_REG:
-            raise RuntimeError(f"Compilation Error: No available loop registers left, reduce the number of loops")
+            # no more room; leave pointer at sentinel so next allocation hits the guard
+            self._curr_loop_reg_ptr = Compiler.NUM_REG
         else:
-            self._curr_loop_reg_ptr  = self._curr_loop_reg_ptr + Compiler.LOOP_REG_PTR_STEP
+            self._curr_loop_reg_ptr += Compiler.LOOP_REG_PTR_STEP
 
 
     def _step_page_ptr(self):
@@ -200,6 +208,52 @@ class Compiler():
         if self._curr_page_ptr + Compiler.PAGE_PTR_STEP > Compiler.NUM_PAGE:
             raise RuntimeError(f"Compilation Error: No available registers left (page: {self._curr_page_ptr}, reg: {self._curr_reg_ptr})")
         self._curr_page_ptr = self._curr_page_ptr + Compiler.PAGE_PTR_STEP
+
+
+    """
+    ----------------------------------
+    Loop handling functions:
+    When a loop start event is received:
+        1. load loop count to register
+        2. mark which regsiter is used for this loop id
+    When a loop end event is received:
+        1. load register number for this loop id
+        2. call loopnz
+
+    This does not free up used loop registers after loop ends!
+    The bet is that no body uses up all loop registers in page 0 in a single program
+    ----------------------------------
+    """
+
+    def start_loop(self, loop_start_event):
+        """
+        handle loop start event
+        1. load loop count to register
+        2. mark which regsiter is used for this loop id
+
+        """
+        if self._curr_loop_reg_ptr >= Compiler.NUM_REG:
+            raise RuntimeError("No available loop registers left...")
+
+        id = loop_start_event["id"]
+        count = loop_start_event["count"]
+        r_count = self._curr_loop_reg_ptr   # count register
+        self.loop_count_reg_LUT[id] = r_count # save the loop id and its associated register number
+        self.awg_prog.safe_regwi(0, r_count, count - 1, comment=f'count = {count}') # load reg value
+        # step loop reg pointer
+        self._step_loop_reg_ptr()
+
+    
+    def end_loop(self, loop_end_event):
+        """
+        handle loop end event
+        1. load register number for this loop id
+        2. call loopnz 
+        """
+        id = loop_end_event["id"]
+        count = loop_end_event["count"]
+        r_count = self.loop_count_reg_LUT[id]   # count register
+        self.awg_prog.loopnz(0, r_count, f"LOOP_{id}") # call loopnz
 
 
     def compile(self, prog_name):
@@ -242,42 +296,19 @@ class Compiler():
         # run the scheduler to generate asm code for running pulses according to prog structure
         scheduler = Scheduler(self, tokens_dict)
         scheduler_generator = scheduler.schedule_next()
-        for fire_pulse_params in scheduler_generator:
-            if fire_pulse_params["kind"] == "loop_start":
-                id = fire_pulse_params["id"]
-                self.awg_prog.label(f"LOOP_{id}")
+
+        for event in scheduler_generator:
+
+            # handle loop_start, loop_end, pulse seprately
+            if event["kind"] == "loop_start":
+                self.start_loop(event)
+
+            elif event["kind"] == "loop_end":
+                self.end_loop(event)
         
-            elif fire_pulse_params["kind"] == "loop_end":
-                id = fire_pulse_params["id"]
-                count = fire_pulse_params["count"]
-                r_count = self._curr_loop_reg_ptr
-                # store the loop count to register on page 0
-                self.safe_regwi(0, r_count, count, comment=f'loop count = {count}')
-                
-
-                self.awg_prog.loopnz(f"LOOP_{id}")
-
-
-        
-            elif fire_pulse_params["kind"] == "pulse":
-                ch, start_time, pulse_name = fire_pulse_params["ch"], fire_pulse_params["time"], fire_pulse_params["name"]
+            elif event["kind"] == "pulse":
+                ch, start_time, pulse_name = event["ch"], event["time"], event["name"]
                 self.fire_pulse(ch, start_time, pulse_name)
-
-"""
-if ev["kind"] == "pulse":
-                yield {"kind": "pulse", "ch": ch, "time": ts, "name": ev["name"]}
-                self.curr_times[ch] = ts + self.compiler.pulse_length_LUT[ev["name"]]
-            elif ev["kind"] == "loop_start":
-                yield {"kind": "loop_start", "ch": ch, "time": ts,
-                   "id": ev["id"], "count": ev["count"]}
-            # loop_start does not change time
-            elif ev["kind"] == "loop_end":
-                yield {"kind": "loop_end", "ch": ch, "time": ts, "id": ev["id"]}
-"""
-
-
-            # [ch, start_time, pulse_name] = fire_pulse_params
-            # self.fire_pulse(ch, start_time, pulse_name)
 
         self.awg_prog.end()
 
@@ -320,6 +351,12 @@ if ev["kind"] == "pulse":
         It allocates freq, phase, gain, phrst, mode, outsel, stdysel, and load memory data to
         addr of every ch (all channels 0-7), it does not populate the t register 
         """
+        # guard: ensure there is room for another 6-register block before writing
+        if (self._curr_page_ptr > Compiler.NUM_PAGE or
+            (self._curr_page_ptr == Compiler.NUM_PAGE and
+             self._curr_reg_ptr + Compiler.REG_PTR_STEP - 1 >= Compiler.NUM_REG)):
+            raise RuntimeError(f"Compilation Error: No available registers left (page: {self._curr_page_ptr}, reg: {self._curr_reg_ptr})")
+
         p = self.awg_prog
         pulse_name = pulse_cfg["name"]
         style = pulse_cfg["style"]
