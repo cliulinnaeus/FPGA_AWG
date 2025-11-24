@@ -514,31 +514,34 @@ class Scheduler():
         
         """
         q = PriorityQueue()
-        for ch, next_pulse_gen in self.gen_dict.items():
-            # enqueue the first token that's not a wait time, which is a pulse name
-            for token in next_pulse_gen:                
-                if token.isnumeric():    # if it's a number, it's a wait time
-                    self.curr_times[ch] += int(token)
-                else:    # if it's a pulse name
-                    q.put((self.curr_times[ch], (ch, token)))
-                    break        
-        while True:
-            # get the earliest pulse (q.get() returns (prio, item))
-            (ch, pulse_name) = q.get()[1]
-            # yield channel, start time, pulse name
-            yield [ch, self.curr_times[ch], pulse_name]
-            # update new pulse start time
-            self.curr_times[ch] += self.compiler.pulse_length_LUT[pulse_name]            
-
-            # on the current channel enqueue the first token that's not a wait time, which is a pulse name
-            for token in self.gen_dict[ch]:                
-                if token.isnumeric():    # if it's a number, it's a wait time
-                    self.curr_times[ch] += int(token)
-                else:    # if it's a pulse name
-                    q.put((self.curr_times[ch], (ch, token)))
+        def prime_channel(ch):
+            # enqueue the first event that's not a wait time, which is a pulse name
+            for ev in self.gen_dict[ch]:
+                if ev["kind"] == "wait":
+                    self.curr_times[ch] += ev["value"]
+                else:
+                    q.put((self.curr_times[ch], ch, ev))
                     break
-            if q.empty():
-                break
+
+        for ch in self.gen_dict:
+            # store the first pulse of each channel to the priority queue
+            prime_channel(ch)
+
+        while not q.empty():
+            # get the earliest event
+            ts, ch, ev = q.get()
+            if ev["kind"] == "pulse":
+                yield {"kind": "pulse", "ch": ch, "time": ts, "name": ev["name"]}
+                self.curr_times[ch] = ts + self.compiler.pulse_length_LUT[ev["name"]]
+            elif ev["kind"] == "loop_start":
+                yield {"kind": "loop_start", "ch": ch, "time": ts,
+                   "id": ev["id"], "count": ev["count"]}
+            # loop_start does not change time
+            elif ev["kind"] == "loop_end":
+                yield {"kind": "loop_end", "ch": ch, "time": ts, "id": ev["id"]}
+            # loop_end does not change time
+
+            prime_channel(ch)
 
                     
     def next_token(self, line_token_lst): 
@@ -548,7 +551,11 @@ class Scheduler():
         for token in line_token_lst:
             yield token
 
-    def next_pulse(self, tokens):
+    def _new_loop_id(self):
+        self._loop_id += 1
+        return self._loop_id
+
+    def next_pulse(self, tokens, depth=0):
         """
         Gives the next pulse for just one channel. Unwraps nested loops
         uses yield instead of return so that the for loop can be continued
@@ -557,16 +564,22 @@ class Scheduler():
         tokens = iter(tokens)
 
         for t in tokens:
+            
             if t == "loop":
                 # make generator step next to get loop_count
                 loop_count = int(next(tokens))
-                # loop body should be a string rep of list
+
+                # tokennize the loop body
                 loop_body_tokens = self.compiler.tokenize(next(tokens))
-                # use yield instead of return so that for loop can be continued
-                for _ in range(loop_count):
-                    yield from self.next_pulse(loop_body_tokens)
+                # increment loop id
+                loop_id = self._new_loop_id()
+                yield {"kind": "loop_start", "id": loop_id, "count": loop_count}
+                yield from self.next_pulse(loop_body_tokens, depth + 1)
+                yield {"kind": "loop_end", "id": loop_id, "depth": depth}
+            elif t.isnumeric():
+                yield {"kind": "wait", "value": int(t)}
             else:
                 # handle pulse 
-                yield t
+                yield {"kind": "pulse", "name": t}
 
         
