@@ -230,7 +230,6 @@ class Compiler():
         handle loop start event
         1. load loop count to register
         2. mark which regsiter is used for this loop id
-
         """
         if self._curr_loop_reg_ptr >= Compiler.NUM_REG:
             raise RuntimeError("No available loop registers left...")
@@ -254,6 +253,7 @@ class Compiler():
         id = loop_end_event["id"]
         count = loop_end_event["count"]
         r_count = self.loop_count_reg_LUT[id]   # count register
+        # TODO: add a line to increment all time registers (each pulse has a diff time reg) by total length in loop
         self.awg_prog.loopnz(0, r_count, f"LOOP_{id}") # call loopnz
 
 
@@ -370,6 +370,7 @@ class Compiler():
         stdysel = pulse_cfg.get("stdysel")
         length_in_ns = pulse_cfg["length"]        # length in ns
         # convert ns to number of clk cycles of generator frequency. hard coded to be ch0
+        # If gen_ch or ro_ch is specified, uses that generator/readout channel’s fabric clock. i.e. wait time
         length_in_clkcycle = p.soccfg.us2cycles(self._ns2us(length_in_ns), gen_ch=0)
         i_data_name = pulse_cfg.get("i_data_name")
         q_data_name = pulse_cfg.get("q_data_name")
