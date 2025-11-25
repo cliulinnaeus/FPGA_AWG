@@ -168,7 +168,7 @@ class Compiler():
                 self.list_all_pulses(tokens_set, self.tokenize(t))
             else:
                 # if t is a number, this means to wait, so don't save it in the set
-                if not t.isnumeric() and t != "loop":
+                if not Scheduler.is_float(t) and t != "loop":
                     tokens_set.add(t)
 
 
@@ -642,7 +642,14 @@ class Scheduler():
     def _new_loop_id(self):
         self._loop_id += 1
         return self._loop_id
-
+    
+    def _is_float(self, s):
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+        
     def next_pulse(self, tokens, depth=0):
         """
         Gives the next pulse for just one channel. Unwraps nested loops
@@ -664,8 +671,8 @@ class Scheduler():
                 yield {"kind": "loop_start", "id": loop_id, "count": loop_count}
                 yield from self.next_pulse(loop_body_tokens, depth + 1)
                 yield {"kind": "loop_end", "id": loop_id, "count": loop_count, "depth": depth}
-            elif t.isnumeric():
-                yield {"kind": "wait", "value": int(t)}
+            elif self._is_float(t):
+                yield {"kind": "wait", "value": t}
             else:
                 # handle pulse 
                 yield {"kind": "pulse", "name": t}
