@@ -517,8 +517,8 @@ class Scheduler():
         for ch, next_pulse_gen in self.gen_dict.items():
             # enqueue the first token that's not a wait time, which is a pulse name
             for token in next_pulse_gen:                
-                if token.isnumeric():    # if it's a number, it's a wait time
-                    self.curr_times[ch] += int(token)
+                if Scheduler._is_float(token):    # if it's a number, it's a wait time
+                    self.curr_times[ch] += float(token)
                 else:    # if it's a pulse name
                     q.put((self.curr_times[ch], (ch, token)))
                     break        
@@ -532,8 +532,8 @@ class Scheduler():
 
             # on the current channel enqueue the first token that's not a wait time, which is a pulse name
             for token in self.gen_dict[ch]:                
-                if token.isnumeric():    # if it's a number, it's a wait time
-                    self.curr_times[ch] += int(token)
+                if Scheduler._is_float(token):    # if it's a number, it's a wait time
+                    self.curr_times[ch] += float(token)
                 else:    # if it's a pulse name
                     q.put((self.curr_times[ch], (ch, token)))
                     break
@@ -547,6 +547,13 @@ class Scheduler():
         """
         for token in line_token_lst:
             yield token
+
+    def _is_float(self, s):
+            try:
+                float(s)
+                return True
+            except ValueError:
+                return False
 
     def next_pulse(self, tokens):
         """
