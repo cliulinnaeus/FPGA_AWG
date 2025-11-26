@@ -71,6 +71,9 @@ class Compiler():
         # schedule obj to be instantiated by self.compile
         self.scheduler = None
 
+        # stack to keep track of loop body time
+        self.loop_stack = []
+
         self.board_name = self.awg_prog.soccfg['board']
         if self.board_name == 'RFSoC4x2':
             self.NUM_CHANNELS = 2
@@ -251,13 +254,19 @@ class Compiler():
         ch = loop_start_event["ch"]
         r_count = self._curr_loop_reg_ptr   # count register
         self.loop_count_reg_LUT[id] = r_count # save the loop id and its associated register number
-        self.awg_prog.safe_regwi(0, r_count, count - 1, comment=f'count = {count}') # load reg value
-        self.awg_prog.label(f"LOOP_{id}")
+        self.awg_prog.safe_regwi(0, r_count, count - 1, comment=f'Loop_{id} count = {count}') # load reg value
         # step loop reg pointer
         self._step_loop_reg_ptr()
         # reset both the generator clock and scheduler's time tracker to 0
-        self.awg_prog.synci(self.scheduler.curr_times[ch])
+        # need to convert to clk cycle based on the processor clock (wait time)
+        curr_time_in_clk_cycle = self.awg_prog.soccfg.us2cycles(self._ns2us(self.scheduler.curr_times[ch]))
+        self.awg_prog.synci(curr_time_in_clk_cycle)
+        self.awg_prog.label(f"LOOP_{id}")
+        # push a frame onto the loop stack to calculate the time of the body of the loop
+        # self.loop_stack.append({"id": id, "reg": r_count, 
+        #                         "entry_time": self.scheduler.curr_times[ch], "body_time": 0})
         self.scheduler.curr_times[ch] = 0
+
     
     def end_loop(self, loop_end_event):
         """
@@ -267,6 +276,20 @@ class Compiler():
         """
         id = loop_end_event["id"]
         count = loop_end_event["count"]
+        ch = loop_end_event["ch"]
+        
+        # loop_frame = self.loop_stack.pop()
+        # if loop_frame:
+
+
+
+        # reset the generator clock and scheduler's time tracker to 0
+        curr_time_in_clk_cycle = self.awg_prog.soccfg.us2cycles(self._ns2us(self.scheduler.curr_times[ch]))
+        self.awg_prog.synci(curr_time_in_clk_cycle)
+        self.scheduler.curr_times[ch] = 0
+
+
+        # loop back and decrement counter
         r_count = self.loop_count_reg_LUT[id]   # count register
         self.awg_prog.loopnz(0, r_count, f"LOOP_{id}") # call loopnz
 
