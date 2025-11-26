@@ -171,7 +171,7 @@ class Compiler():
                 self.list_all_pulses(tokens_set, self.tokenize(t))
             else:
                 # if t is a number, this means to wait, so don't save it in the set
-                if not Scheduler.is_float(t) and t != "loop":
+                if not self.scheduler.is_float(t) and t != "loop":
                     tokens_set.add(t)
 
 
