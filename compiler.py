@@ -68,6 +68,9 @@ class Compiler():
         # loop register look up table. key: loop id, value: register number on page 0
         self.loop_count_reg_LUT = {}
 
+        # schedule obj to be instantiated by self.compile
+        self.scheduler = None
+
         self.board_name = self.awg_prog.soccfg['board']
         if self.board_name == 'RFSoC4x2':
             self.NUM_CHANNELS = 2
@@ -236,13 +239,16 @@ class Compiler():
 
         id = loop_start_event["id"]
         count = loop_start_event["count"]
+        ch = loop_start_event["ch"]
         r_count = self._curr_loop_reg_ptr   # count register
         self.loop_count_reg_LUT[id] = r_count # save the loop id and its associated register number
         self.awg_prog.safe_regwi(0, r_count, count - 1, comment=f'count = {count}') # load reg value
         self.awg_prog.label(f"LOOP_{id}")
         # step loop reg pointer
         self._step_loop_reg_ptr()
-
+        # reset both the generator clock and scheduler's time tracker to 0
+        self.awg_prog.synci(self.scheduler.curr_times[ch])
+        self.scheduler.curr_times[ch] = 0
     
     def end_loop(self, loop_end_event):
         """
@@ -253,7 +259,6 @@ class Compiler():
         id = loop_end_event["id"]
         count = loop_end_event["count"]
         r_count = self.loop_count_reg_LUT[id]   # count register
-        # TODO: add a line to increment all time registers (each pulse has a diff time reg) by total length in loop
         self.awg_prog.loopnz(0, r_count, f"LOOP_{id}") # call loopnz
 
 
@@ -295,8 +300,8 @@ class Compiler():
         self.awg_prog.synci(200)
 
         # run the scheduler to generate asm code for running pulses according to prog structure
-        scheduler = Scheduler(self, tokens_dict)
-        scheduler_generator = scheduler.schedule_next()
+        self.scheduler = Scheduler(self, tokens_dict)
+        scheduler_generator = self.scheduler.schedule_next()
 
         for event in scheduler_generator:
 
@@ -309,6 +314,7 @@ class Compiler():
         
             elif event["kind"] == "pulse":
                 ch, start_time, pulse_name = event["ch"], event["time"], event["name"]
+                # this time is in 
                 self.fire_pulse(ch, start_time, pulse_name)
 
         self.awg_prog.end()
@@ -338,7 +344,7 @@ class Compiler():
         
         mc_reg = pulse_reg_ptr + 4
         time_reg = pulse_reg_ptr + 5
-        
+        # convert to us to cycle based on the wait time clock
         start_time_in_clkcycle = p.soccfg.us2cycles(self._ns2us(start_time))
         p.safe_regwi(pulse_page_ptr, time_reg, start_time_in_clkcycle, comment=f'time = {start_time} ns')       
         
@@ -370,7 +376,7 @@ class Compiler():
         stdysel = pulse_cfg.get("stdysel")
         length_in_ns = pulse_cfg["length"]        # length in ns
         # convert ns to number of clk cycles of generator frequency. hard coded to be ch0
-        # If gen_ch or ro_ch is specified, uses that generator/readout channel’s fabric clock. i.e. wait time
+        # If gen_ch or ro_ch is specified, uses that generator/readout channel’s fabric clock. i.e. pulse length
         length_in_clkcycle = p.soccfg.us2cycles(self._ns2us(length_in_ns), gen_ch=0)
         i_data_name = pulse_cfg.get("i_data_name")
         q_data_name = pulse_cfg.get("q_data_name")
@@ -497,7 +503,7 @@ class Compiler():
         self._curr_page_ptr = 1
         self.reg_LUT = {}
         self.page_LUT = {}
-        self.pulse_length_LUT = {}
+        self.pulse_length_LUT = {} # saves pulse length in ns under name
         self.pulse_style_LUT = {}
 
     
@@ -609,7 +615,7 @@ class Scheduler():
                 else:
                     q.put((self.curr_times[ch], ch, ev))
                     break
-
+ 
         for ch in self.gen_dict:
             # store the first pulse of each channel to the priority queue
             prime_channel(ch)
@@ -618,8 +624,8 @@ class Scheduler():
             # get the earliest event
             ts, ch, ev = q.get()
             if ev["kind"] == "pulse":
-                yield {"kind": "pulse", "ch": ch, "time": ts, "name": ev["name"]}
                 self.curr_times[ch] = ts + self.compiler.pulse_length_LUT[ev["name"]]
+                yield {"kind": "pulse", "ch": ch, "time": ts, "name": ev["name"]}
             elif ev["kind"] == "loop_start":
                 yield {"kind": "loop_start", "ch": ch, "time": ts,
                    "id": ev["id"], "count": ev["count"]}
@@ -643,7 +649,7 @@ class Scheduler():
         self._loop_id += 1
         return self._loop_id
     
-    def _is_float(self, s):
+    def is_float(self, s):
         try:
             float(s)
             return True
@@ -671,8 +677,8 @@ class Scheduler():
                 yield {"kind": "loop_start", "id": loop_id, "count": loop_count}
                 yield from self.next_pulse(loop_body_tokens, depth + 1)
                 yield {"kind": "loop_end", "id": loop_id, "count": loop_count, "depth": depth}
-            elif self._is_float(t):
-                yield {"kind": "wait", "value": t}
+            elif self.is_float(t):
+                yield {"kind": "wait", "value": float(t)}
             else:
                 # handle pulse 
                 yield {"kind": "pulse", "name": t}
