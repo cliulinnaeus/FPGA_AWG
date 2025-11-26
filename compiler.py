@@ -180,7 +180,7 @@ class Compiler():
                 self.list_all_pulses(tokens_set, self.tokenize(t))
             else:
                 # if t is a number, this means to wait, so don't save it in the set
-                if not Scheduler.is_float(t) and t != "loop":
+                if not Compiler.is_float(t) and t != "loop":
                     tokens_set.add(t)
 
 
@@ -679,7 +679,7 @@ class Scheduler():
                 yield {"kind": "loop_start", "id": loop_id, "count": loop_count}
                 yield from self.next_pulse(loop_body_tokens, depth + 1)
                 yield {"kind": "loop_end", "id": loop_id, "count": loop_count, "depth": depth}
-            elif Scheduler.is_float(t):
+            elif Compiler.is_float(t):
                 yield {"kind": "wait", "value": float(t)}
             else:
                 # handle pulse 
