@@ -85,6 +85,15 @@ class Compiler():
         self.f_fabric = self.awg_prog.soccfg['gens'][0]['f_fabric']
 
 
+    @staticmethod
+    def is_float(s):
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+
+
     def tokenize(self, prog_line):
         """
         parse the prog_line into a list of string "X", "Y" (pulse names)
@@ -171,7 +180,7 @@ class Compiler():
                 self.list_all_pulses(tokens_set, self.tokenize(t))
             else:
                 # if t is a number, this means to wait, so don't save it in the set
-                if not self.scheduler.is_float(t) and t != "loop":
+                if not Scheduler.is_float(t) and t != "loop":
                     tokens_set.add(t)
 
 
@@ -648,13 +657,6 @@ class Scheduler():
     def _new_loop_id(self):
         self._loop_id += 1
         return self._loop_id
-    
-    def is_float(self, s):
-        try:
-            float(s)
-            return True
-        except ValueError:
-            return False
         
     def next_pulse(self, tokens, depth=0):
         """
@@ -677,7 +679,7 @@ class Scheduler():
                 yield {"kind": "loop_start", "id": loop_id, "count": loop_count}
                 yield from self.next_pulse(loop_body_tokens, depth + 1)
                 yield {"kind": "loop_end", "id": loop_id, "count": loop_count, "depth": depth}
-            elif self.is_float(t):
+            elif Scheduler.is_float(t):
                 yield {"kind": "wait", "value": float(t)}
             else:
                 # handle pulse 
