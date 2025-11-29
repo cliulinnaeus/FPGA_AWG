@@ -189,6 +189,16 @@ class Compiler():
         self._curr_page_ptr = self._curr_page_ptr + Compiler.PAGE_PTR_STEP
 
 
+    @staticmethod
+    def is_float(s):
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+
+
+
     def compile(self, prog_name):
         """
         Compilation consists of the following steps:
@@ -517,7 +527,7 @@ class Scheduler():
         for ch, next_pulse_gen in self.gen_dict.items():
             # enqueue the first token that's not a wait time, which is a pulse name
             for token in next_pulse_gen:                
-                if Scheduler._is_float(token):    # if it's a number, it's a wait time
+                if Compiler.is_float(token):    # if it's a number, it's a wait time
                     self.curr_times[ch] += float(token)
                 else:    # if it's a pulse name
                     q.put((self.curr_times[ch], (ch, token)))
@@ -532,7 +542,7 @@ class Scheduler():
 
             # on the current channel enqueue the first token that's not a wait time, which is a pulse name
             for token in self.gen_dict[ch]:                
-                if Scheduler._is_float(token):    # if it's a number, it's a wait time
+                if Compiler.is_float(token):    # if it's a number, it's a wait time
                     self.curr_times[ch] += float(token)
                 else:    # if it's a pulse name
                     q.put((self.curr_times[ch], (ch, token)))
@@ -548,12 +558,6 @@ class Scheduler():
         for token in line_token_lst:
             yield token
 
-    def _is_float(self, s):
-            try:
-                float(s)
-                return True
-            except ValueError:
-                return False
 
     def next_pulse(self, tokens):
         """
