@@ -326,7 +326,7 @@ class Compiler():
             addr_reg = 0
             # make the mode code
             mc = self._get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel="dds", length=length_in_clkcycle)
-            true_length_in_ns = self._us2ns(p.soccfg.cycles2us(length_in_clkcycle))
+            true_length_in_ns = self._us2ns(p.soccfg.cycles2us(length_in_clkcycle), gen_ch=0)
             p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length(cc) = {mc % 2**16} | length(ns) = {true_length_in_ns}')
         elif style == 'arb':
             # add evelope to all channels that uses this pulse
@@ -344,7 +344,7 @@ class Compiler():
     
             # make the mode code
             mc = self._get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel=outsel, length=env_length)
-            true_length_in_ns = self._us2ns(p.soccfg.cycles2us(length_in_clkcycle))
+            true_length_in_ns = self._us2ns(p.soccfg.cycles2us(length_in_clkcycle), gen_ch=0)
             p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length(cc) = {mc % 2**16} | length(ns) = {true_length_in_ns}')
 
         # add flat envelope to allow pulse length not equal to a multiple of one clk cycle
