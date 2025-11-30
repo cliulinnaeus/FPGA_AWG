@@ -248,6 +248,9 @@ class Compiler():
     def _ns2us(self, time_in_ns):
         return time_in_ns / 1000
 
+    def _us2ns(self, time_in_us):
+        return time_in_us * 1000
+    
     def fire_pulse(self, ch, start_time, pulse_name):
         """
         Generate asm code for firing pulse at ch at start_time
@@ -272,7 +275,8 @@ class Compiler():
         time_reg = pulse_reg_ptr + 5
         
         start_time_in_clkcycle = p.soccfg.us2cycles(self._ns2us(start_time))
-        p.safe_regwi(pulse_page_ptr, time_reg, start_time_in_clkcycle, comment=f'time = {start_time} ns')       
+        true_start_time = self._us2ns(p.soccfg.cycles2us(start_time_in_clkcycle))
+        p.safe_regwi(pulse_page_ptr, time_reg, start_time_in_clkcycle, comment=f'time = {true_start_time} ns')       
         
         ch_number = int(ch[-1])
         p.set(ch_number, pulse_page_ptr, freq_reg, phase_reg, addr_reg, gain_reg, mc_reg, time_reg)
@@ -322,7 +326,8 @@ class Compiler():
             addr_reg = 0
             # make the mode code
             mc = self._get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel="dds", length=length_in_clkcycle)
-            p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length(cc) = {mc % 2**16} | length(ns) = {length_in_ns}')
+            true_length_in_ns = self._us2ns(p.soccfg.cycles2us(length_in_clkcycle))
+            p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length(cc) = {mc % 2**16} | length(ns) = {true_length_in_ns}')
         elif style == 'arb':
             # add evelope to all channels that uses this pulse
             # for a single pulse on different ch, every ch has a different addr
@@ -339,7 +344,8 @@ class Compiler():
     
             # make the mode code
             mc = self._get_mode_code(phrst=phrst, stdysel=stdysel, mode=mode, outsel=outsel, length=env_length)
-            p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length(cc) = {mc % 2**16} ')
+            true_length_in_ns = self._us2ns(p.soccfg.cycles2us(length_in_clkcycle))
+            p.safe_regwi(self._curr_page_ptr, self._curr_reg_ptr + 4, mc, comment=f'phrst| stdysel | mode | | outsel = 0b{mc//2**16:>05b} | length(cc) = {mc % 2**16} | length(ns) = {true_length_in_ns}')
 
         # add flat envelope to allow pulse length not equal to a multiple of one clk cycle
         elif style == 'buffer':
