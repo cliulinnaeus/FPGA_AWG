@@ -5,9 +5,9 @@ QICK-AWG is a specialized software package that transforms a QICK-based FPGA int
 Built on top of the QICK library, this codebase provides a straightforward programming interface. When deployed, the FPGA operates as an AWG, actively listening for and responding to user commands through a network socket. Note that this initial version does not yet support in situ pulse parameter sweep, which is a planned update in future versions.
 
 Note: 
-- This software has only been tested on ZCU111. One may run into unexpected bugs on other QICK boards (ZCU216, RFSoC4x2)
+- This software supports both ZCU111 and RFSoC4x2. 
 - This software does not yet support in situ pulse parameter sweeps, which can be used to realize adiabatic passage sequences. This is a planned update in future versions.
-- This software is still yet a work in progress. Please report any bugs to me. 
+- Please report any bugs to me. 
 
 See the original QICK repository at: https://github.com/openquantumhardware/qick
 
@@ -16,36 +16,35 @@ See the original QICK repository at: https://github.com/openquantumhardware/qick
 ### Prerequisites
 It is assumed you start with a brand new ZCU111 board. If you have an old board with already installed newest version of QICK, you may want to consider downgrading it. 
 
-For PYNQ disk image, it is recommended to use v2.6 (this code based has only been tested on v2.6)
-For QICK version, it is required to use an older version (0.2.191 works), as QICK-AWG will not work on the newest version in the QICK repo. You can find an older (and working) version of QICK [here](https://github.com/yao-lab-harvard/qick). Clone this repository into your FPGA. 
+You can find an working (and older) version of QICK [here](https://github.com/yao-lab-harvard/qick). Clone this repository onto your FPGA. 
 
-You also need a client computer to be connect to the same LAN of the FPGA. 
+You need a client computer to be connect to the same LAN as the FPGA. 
 
 ### Installation instructions
 This package needs to be downloaded on both the QICK board and the client computer. 
 
 #### Installation on the QICK board
 Follow the quick start guide in QICK repository but do not run the installation jupyter notebook _000_Install_qick_package.ipynb_ in _qick_demos_: [QICK qick start guide](https://github.com/openquantumhardware/qick/tree/main/quick_start)
-
-Use your favorite shell program (I typically use GitBash), ssh into the FPGA address, e.g.
+Run the following in shell
+ssh into the FPGA address, e.g.
 ```
 ssh xilinx@192.168.0.123
 ```
-the password is _xilinx_ 
+it will ask for the password, the password is _xilinx_ 
 
-Now type 
+check current directory
 ```
 ls jupyter_notebooks
 ```
-and you should see a repository called _qick_ being listed. cd into this repository
+and you should see a repository _qick_ being listed.
 ```
 cd jupyter_notebooks/qick
 ```
-Evoke root access (the QICK library can only be ran under root access, which means it has to be installed under root)
+Get root access (the QICK library can only be ran under root access, which means it has to be installed under root)
 ```
 su
 ```
-enter password _xilinx_. You should now see the new line should initiate with _root@pynq:_
+enter password _xilinx_ again. A new line should initiate with _root@pynq:_
 
 run the installation program
 ```
